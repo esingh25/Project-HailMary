@@ -59,7 +59,11 @@ CREATE TABLE odds_archive (
   selection    TEXT NOT NULL,
   line         REAL,
   price        INT NOT NULL,
-  captured_at  TIMESTAMP NOT NULL
+  captured_at  TIMESTAMP NOT NULL,
+  -- Re-ingesting the same snapshot must not create a duplicate row (§13
+  -- principle 8: ingestion is idempotent). A snapshot is uniquely identified by
+  -- what it's quoting and when it was captured.
+  UNIQUE (game_id, book, market, selection, captured_at)
 );
 CREATE INDEX idx_odds_archive_game ON odds_archive (game_id, captured_at DESC);
 

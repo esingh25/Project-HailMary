@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hailmary.schemas.contracts import InjuryRecord, OddsSnapshot, SemanticDoc, StatRecord
-from hailmary.schemas.internal import EntityMap, WeatherRecord
+from hailmary.schemas.internal import EntityMap, GameResult, WeatherRecord
 
 FIXTURES_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent / "fixtures"
 
@@ -36,6 +36,9 @@ class FixtureData:
         ]
         self.injuries = [InjuryRecord.model_validate(r) for r in self._read_jsonl("injuries.jsonl")]
         self.weather = [WeatherRecord.model_validate(r) for r in self._read_jsonl("weather.jsonl")]
+        self.game_results = [
+            GameResult.model_validate(r) for r in self._read_jsonl("game_results.jsonl")
+        ]
         self.entity_map = EntityMap.model_validate(
             json.loads((self.dir / "entity_map.json").read_text(encoding="utf-8"))
         )
@@ -81,6 +84,11 @@ class ReplayFeedClient:
         return [
             w for w in self._fixture.weather if w.game_id == game_id and w.captured_at <= self.now
         ]
+
+    async def get_game_results(self, sport: str) -> list[GameResult]:
+        """Completed games have no timestamp field (they're final by definition), so
+        unlike odds/injuries/weather there's no virtual-clock filter to apply here."""
+        return [g for g in self._fixture.game_results if g.sport == sport]
 
     async def get_entity_map(self) -> EntityMap:
         return self._fixture.entity_map

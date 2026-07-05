@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from hailmary.schemas.contracts import InjuryRecord, OddsSnapshot, SemanticDoc, StatRecord
-from hailmary.schemas.internal import EntityMap, WeatherRecord
+from hailmary.schemas.internal import EntityMap, GameResult, WeatherRecord
 
 FIXTURE_DIR = Path(__file__).resolve().parent.parent.parent / "fixtures" / "synthetic_v0"
 
@@ -99,3 +99,14 @@ def test_embeddings_json_has_a_unit_vector_per_semantic_doc():
         assert len(vector) == embeddings["dim"]
         magnitude = sum(x * x for x in vector) ** 0.5
         assert magnitude == pytest.approx(1.0, abs=1e-6)
+
+
+@pytest.mark.unit
+def test_game_results_jsonl_validates_and_covers_both_sports():
+    records = _load_jsonl("game_results.jsonl")
+    assert len(records) > 0
+    for record in records:
+        GameResult.model_validate(record)
+
+    sports = {r["sport"] for r in records}
+    assert sports == {"nfl", "cfb"}

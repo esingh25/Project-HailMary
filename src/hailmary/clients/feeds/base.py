@@ -10,7 +10,7 @@ responsible for shaping raw feed responses into these same types (built in M8).
 from typing import Protocol
 
 from hailmary.schemas.contracts import InjuryRecord, OddsSnapshot, SemanticDoc, StatRecord
-from hailmary.schemas.internal import EntityMap, WeatherRecord
+from hailmary.schemas.internal import EntityMap, GameResult, WeatherRecord
 
 
 class FeedClient(Protocol):
@@ -23,5 +23,7 @@ class FeedClient(Protocol):
     async def get_injuries(self, team_id: str) -> list[InjuryRecord]: ...
 
     async def get_weather(self, game_id: str) -> list[WeatherRecord]: ...
+
+    async def get_game_results(self, sport: str) -> list[GameResult]: ...
 
     async def get_entity_map(self) -> EntityMap: ...

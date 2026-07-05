@@ -468,6 +468,34 @@ def main() -> None:
     ]
     write_jsonl(FIXTURE_DIR / "weather.jsonl", weather_records)
 
+    # --- game_results.jsonl (already-completed games, feeds the nightly Elo job) -------
+    game_results = [
+        # CFB: the Alabama @ Georgia matchup itself already happened (see manifest).
+        {
+            "sport": "cfb",
+            "home_team_id": "UGA",
+            "away_team_id": "BAMA",
+            "home_score": 24,
+            "away_score": 27,
+        },
+        # NFL: earlier-week results seeding KC/LV and BUF/MIN ratings ahead of week 18.
+        {
+            "sport": "nfl",
+            "home_team_id": "KC",
+            "away_team_id": "LV",
+            "home_score": 31,
+            "away_score": 17,
+        },
+        {
+            "sport": "nfl",
+            "home_team_id": "MIN",
+            "away_team_id": "BUF",
+            "home_score": 20,
+            "away_score": 24,
+        },
+    ]
+    write_jsonl(FIXTURE_DIR / "game_results.jsonl", game_results)
+
     # --- entity_map.json ----------------------------------------------------------------
     entity_map = {
         "team_aliases": {
@@ -514,7 +542,10 @@ def main() -> None:
 
     print(f"Authored fixture at {FIXTURE_DIR}")
     print(f"  stats: {len(stats)}  semantic_docs: {len(semantic_docs)}  odds: {len(odds_series)}")
-    print(f"  injuries: {len(injuries)}  weather: {len(weather_records)}")
+    print(
+        f"  injuries: {len(injuries)}  weather: {len(weather_records)}  "
+        f"game_results: {len(game_results)}"
+    )
 
 
 if __name__ == "__main__":

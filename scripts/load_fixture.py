@@ -24,7 +24,11 @@ async def load(fixture_name: str) -> None:
     for sport in ("nfl", "cfb"):
         stats = await client.get_stats(sport)
         docs = await client.get_semantic_docs(sport)
-        print(f"  {sport}: {len(stats)} stat records, {len(docs)} semantic docs")
+        games = await client.get_game_results(sport)
+        print(
+            f"  {sport}: {len(stats)} stat records, {len(docs)} semantic docs, "
+            f"{len(games)} completed game results"
+        )
 
     for game in fixture.manifest["games"]:
         game_id = game["game_id"]
