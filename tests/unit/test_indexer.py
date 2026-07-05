@@ -209,7 +209,7 @@ async def test_cache_injuries_keys_by_player_id():
         report_date=NOW,
     )
     await cache_injuries(client, [record], ttl)
-    assert "injury:mahomes_pat" in client.store
+    assert "injury:KC:mahomes_pat" in client.store
 
 
 @pytest.mark.unit

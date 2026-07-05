@@ -13,8 +13,10 @@ def odds_key(game_id: str, book: str, market: str, selection: str) -> str:
     return f"odds:{game_id}:{book}:{market}:{selection}"
 
 
-def injury_key(player_id: str) -> str:
-    return f"injury:{player_id}"
+def injury_key(team_id: str, player_id: str) -> str:
+    """Keyed by team first so the live sub-agent (M3) can SCAN 'injury:{team_id}:*'
+    to fetch a whole roster's injuries — Redis has no secondary index otherwise."""
+    return f"injury:{team_id}:{player_id}"
 
 
 def weather_key(game_id: str) -> str:

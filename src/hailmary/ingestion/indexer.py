@@ -59,6 +59,7 @@ async def upsert_semantic_docs(
                     "doc_id": doc.doc_id,
                     "sport": doc.sport,
                     "doc_type": doc.doc_type,
+                    "text": doc.text,
                     "source": doc.source,
                     "published_at": doc.published_at.isoformat(),
                     "content_hash": doc.content_hash,
@@ -115,7 +116,7 @@ async def cache_injuries(
     redis_client: redis.Redis, records: list[InjuryRecord], ttl: TtlConfig
 ) -> int:
     for rec in records:
-        key = injury_key(rec.player_id)
+        key = injury_key(rec.team_id, rec.player_id)
         await redis_client.set(
             key, rec.model_dump_json(), ex=timedelta(minutes=ttl.injuries_minutes)
         )
