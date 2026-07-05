@@ -1,0 +1,68 @@
+[project]
+name = "hailmary"
+version = "0.1.0"
+description = "HailMaryRAG — agentic NFL/CFB research assistant (hybrid RAG + deterministic edge math)"
+authors = [
+    { name = "esingh25", email = "ekam2507@gmail.com" }
+]
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "instructor>=1.3",
+    "anthropic>=0.30",
+    "voyageai>=0.2",
+    "langgraph>=0.1",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "streamlit>=1.36",
+    "elasticsearch>=8.14,<9",
+    "qdrant-client>=1.9",
+    "redis>=5.0",
+    "asyncpg>=0.29",
+    "httpx>=0.27",
+    "apscheduler>=3.10",
+    "sentence-transformers>=3.0",
+    "nfl_data_py>=0.3",
+]
+
+[project.scripts]
+hailmary = "hailmary:main"
+
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+files = ["src/hailmary/schemas", "src/hailmary/synthesis/edge_math.py", "src/hailmary/decompose/routing.py", "src/hailmary/rerank"]
+
+[[tool.mypy.overrides]]
+module = "hailmary.schemas.*"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: pure-logic tests, no I/O, no services",
+    "integration: requires dockerized services (postgres/es/qdrant/redis)",
+    "e2e: full replay-mode pipeline smoke test",
+]
+asyncio_mode = "auto"
