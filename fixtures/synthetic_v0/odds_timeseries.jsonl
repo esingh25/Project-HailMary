@@ -1,0 +1,11 @@
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "spread", "selection": "KC -6.0", "line": -6.0, "price": -110, "captured_at": "2025-12-31T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "spread", "selection": "KC -6.0", "line": -6.0, "price": -115, "captured_at": "2026-01-01T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "spread", "selection": "KC -6.5", "line": -6.5, "price": -110, "captured_at": "2026-01-03T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "spread", "selection": "KC -6.5", "line": -6.5, "price": -108, "captured_at": "2026-01-04T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "moneyline", "selection": "KC", "line": null, "price": -260, "captured_at": "2025-12-31T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "moneyline", "selection": "KC", "line": null, "price": -280, "captured_at": "2026-01-04T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "total", "selection": "Over 47.5", "line": 47.5, "price": -110, "captured_at": "2025-12-31T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "total", "selection": "Over 46.5", "line": 46.5, "price": -105, "captured_at": "2026-01-04T18:00:00+00:00"}
+{"game_id": "2026_18_LV_KC", "book": "draftkings", "market": "player_prop", "selection": "Mahomes Over 265.5 pass yds", "line": 265.5, "price": -112, "captured_at": "2026-01-03T18:00:00+00:00"}
+{"game_id": "2026_18_BUF_MIN", "book": "draftkings", "market": "spread", "selection": "BUF -2.5", "line": -2.5, "price": -110, "captured_at": "2025-12-30T18:00:00+00:00"}
+{"game_id": "2026_18_BUF_MIN", "book": "draftkings", "market": "spread", "selection": "BUF -3.0", "line": -3.0, "price": -108, "captured_at": "2026-01-04T18:00:00+00:00"}
