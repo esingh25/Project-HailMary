@@ -56,3 +56,14 @@ def test_named_player_adds_live_injury_regardless_of_intent(intent):
 def test_named_player_does_not_duplicate_live_injury_already_in_base():
     result = route("player_prop", WITH_PLAYER)
     assert result.count("live_injury") == 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("intent", ["spread", "moneyline", "total"])
+def test_matchup_intents_include_injury_context_even_without_a_named_player(intent):
+    """Regression for the MEDIUM review finding: a generic 'is there value on KC
+    -6.5' query names no player, but roster injury context is still guaranteed
+    evidence per DESIGN.md's evidence-first principle — it must not depend on the
+    LLM's entity extraction happening to surface a player name."""
+    result = route(intent, NO_PLAYERS)
+    assert "live_injury" in result

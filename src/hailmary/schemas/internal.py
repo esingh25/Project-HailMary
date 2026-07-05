@@ -4,13 +4,21 @@ These support single modules and may change without touching the design doc.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
 
 class GameResult(BaseModel):
-    """One completed game, as input to the nightly Elo ratings job."""
+    """One completed game, as input to the nightly Elo ratings job.
 
+    `sport` lets ingestion/elo.update() reject a batch that accidentally mixes
+    sports — the ratings dict it operates on is a flat team_id -> rating map with
+    no sport partition, so a cross-sport team_id collision would otherwise
+    silently corrupt both sports' ratings.
+    """
+
+    sport: Literal["nfl", "cfb"]
     home_team_id: str
     away_team_id: str
     home_score: int

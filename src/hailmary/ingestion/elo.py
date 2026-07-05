@@ -12,9 +12,11 @@ from hailmary.config import EloConfig
 from hailmary.schemas.internal import GameResult
 
 
-def _expected_home_win_prob(home_rating: float, away_rating: float, home_field: float) -> float:
+def _expected_home_win_prob(
+    home_rating: float, away_rating: float, home_field: float, logistic_scale: float
+) -> float:
     diff = (home_rating + home_field) - away_rating
-    return 1 / (1 + 10 ** (-diff / 400))
+    return 1 / (1 + 10 ** (-diff / logistic_scale))
 
 
 def update(
@@ -27,14 +29,29 @@ def update(
 
     Unlisted teams start at `default_rating`. Updates are zero-sum per game: what the
     winner gains, the loser loses.
+
+    All games in one call must share a single sport — `ratings` is a flat
+    `team_id -> rating` dict with no sport partition, so mixing sports in one batch
+    would let colliding team_id abbreviations (e.g. "MIA" in both NFL and CFB)
+    silently corrupt each other's ratings. Callers must invoke this once per sport.
     """
+    if game_results:
+        sports = {game.sport for game in game_results}
+        if len(sports) > 1:
+            raise ValueError(
+                f"update() received games from multiple sports in one batch: {sports}. "
+                "Call update() separately per sport — ratings are not sport-partitioned."
+            )
+
     updated = dict(ratings)
 
     for game in game_results:
         home_rating = updated.get(game.home_team_id, default_rating)
         away_rating = updated.get(game.away_team_id, default_rating)
 
-        expected_home = _expected_home_win_prob(home_rating, away_rating, config.home_field)
+        expected_home = _expected_home_win_prob(
+            home_rating, away_rating, config.home_field, config.logistic_scale
+        )
 
         if game.home_score > game.away_score:
             actual_home = 1.0

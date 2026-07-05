@@ -10,10 +10,15 @@ class EloConfig(BaseModel):
     k: float = 20.0
     home_field: float = 65.0
     mov_multiplier: float = 1.0
+    # Single source of truth for the Elo-diff -> probability logistic divisor, used
+    # both when *updating* ratings (ingestion/elo.py) and when *reading out* a
+    # win probability from ratings (synthesis/elo_prob.py). Keeping one value here
+    # (rather than a second copy in EdgeConfig) avoids the two calibrations
+    # silently drifting apart if this is ever tuned.
+    logistic_scale: float = 400.0
 
 
 class EdgeConfig(BaseModel):
-    logistic_scale: float = 400.0  # Elo-diff -> probability logistic divisor
     ev_value_threshold_pct: float = 3.0
     ev_no_value_threshold_pct: float = -3.0
 

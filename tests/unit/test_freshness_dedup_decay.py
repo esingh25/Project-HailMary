@@ -13,12 +13,18 @@ from hailmary.schemas.contracts import RetrievedChunk
 NOW = datetime(2026, 7, 4, 18, 0, 0, tzinfo=UTC)
 
 
-def make_chunk(source: str, minutes_old: int = 0, content: str = "content", score: float = 0.5):
+def make_chunk(
+    source: str,
+    minutes_old: int = 0,
+    content: str = "content",
+    score: float = 0.5,
+    structured_data: dict | None = None,
+):
     return RetrievedChunk(
         chunk_id=f"{source}_{minutes_old}_{content}",
         source=source,
         content=content,
-        structured_data=None,
+        structured_data=structured_data,
         index_score=score,
         freshness_ts=NOW - timedelta(minutes=minutes_old),
         retrieved_at=NOW,
@@ -101,6 +107,61 @@ def test_dedup_preserves_distinct_content():
     b = make_chunk("stats_es", content="LV rushing stats")
     result = dedup([a, b])
     assert {c.chunk_id for c in result} == {a.chunk_id, b.chunk_id}
+
+
+@pytest.mark.unit
+def test_dedup_collapses_an_injury_status_flip_to_the_latest_status():
+    """Regression for the HIGH review finding: a status change (questionable ->
+    probable) produces different content text, so text-based dedup alone would
+    wrongly keep both as contradictory evidence. Identity keying on player_id
+    (from structured_data) must collapse them to the single freshest status."""
+    older_status = make_chunk(
+        "live_injury",
+        minutes_old=60 * 48,
+        content="Mahomes is questionable with an ankle injury",
+        structured_data={"player_id": "mahomes_pat", "status": "questionable"},
+    )
+    newer_status = make_chunk(
+        "live_injury",
+        minutes_old=60 * 24,
+        content="Mahomes is probable with an ankle injury",
+        structured_data={"player_id": "mahomes_pat", "status": "probable"},
+    )
+    result = dedup([older_status, newer_status])
+    assert result == [newer_status]
+
+
+@pytest.mark.unit
+def test_dedup_does_not_collapse_distinct_players_sharing_a_source():
+    a = make_chunk(
+        "live_injury", content="A is questionable", structured_data={"player_id": "player_a"}
+    )
+    b = make_chunk(
+        "live_injury", content="B is questionable", structured_data={"player_id": "player_b"}
+    )
+    result = dedup([a, b])
+    assert {c.chunk_id for c in result} == {a.chunk_id, b.chunk_id}
+
+
+@pytest.mark.unit
+def test_dedup_does_not_collapse_distinct_odds_snapshots_by_identity():
+    """Odds line-movement history must survive dedup even though every snapshot
+    for a game/market/selection shares the same natural key — only injuries use
+    identity-based keying."""
+    opening = make_chunk(
+        "live_odds",
+        minutes_old=60 * 4,
+        content="KC -6.0 opened at -110",
+        structured_data={"game_id": "g1", "market": "spread", "selection": "KC -6.0"},
+    )
+    current = make_chunk(
+        "live_odds",
+        minutes_old=0,
+        content="KC -6.5 currently at -108",
+        structured_data={"game_id": "g1", "market": "spread", "selection": "KC -6.5"},
+    )
+    result = dedup([opening, current])
+    assert {c.chunk_id for c in result} == {opening.chunk_id, current.chunk_id}
 
 
 # --- decay ---------------------------------------------------------------------

@@ -34,7 +34,11 @@ CREATE TABLE team_ratings (
   season      INT NOT NULL,
   rating      REAL NOT NULL,
   as_of       TIMESTAMP NOT NULL,
-  PRIMARY KEY (team_id, season)
+  -- sport is part of the key (not just team_id, season): team abbreviations can
+  -- collide across NFL/CFB (e.g. "MIA"), and DESIGN.md's own TeamRating contract
+  -- (§4) already carries sport as a field — the original §6.4 DDL omitted it from
+  -- the key, which this corrects before the nightly Elo job (M2) writes to it.
+  PRIMARY KEY (team_id, sport, season)
 );
 
 CREATE TABLE semantic_cache_index (
