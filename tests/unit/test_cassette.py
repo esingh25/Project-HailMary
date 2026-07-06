@@ -57,10 +57,18 @@ async def test_llm_client_replay_mode_raises_loudly_on_prompt_change(tmp_path):
 
 
 @pytest.mark.unit
-async def test_llm_client_live_mode_not_yet_implemented(tmp_path):
-    settings = Settings(_env_file=None, replay_llm=False)
+async def test_llm_client_live_mode_without_api_key_raises_clearly(tmp_path):
+    settings = Settings(_env_file=None, replay_llm=False, anthropic_api_key=None)
     client = LLMClient(settings, tmp_path)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        await client.complete("claude-sonnet-4-6", "v1", "write a report")
+
+
+@pytest.mark.unit
+async def test_llm_client_live_mode_requires_a_response_model(tmp_path):
+    settings = Settings(_env_file=None, replay_llm=False, anthropic_api_key="fake-key-for-test")
+    client = LLMClient(settings, tmp_path)
+    with pytest.raises(ValueError, match="response_model"):
         await client.complete("claude-sonnet-4-6", "v1", "write a report")
 
 

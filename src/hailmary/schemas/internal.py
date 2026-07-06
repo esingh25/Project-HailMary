@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from hailmary.schemas.contracts import Condition
+
 
 class GameResult(BaseModel):
     """One completed game, as input to the nightly Elo ratings job.
@@ -65,3 +67,27 @@ class WeatherRecord(BaseModel):
     wind_mph: float
     precipitation_pct: float
     captured_at: datetime
+
+
+class GuardrailResult(BaseModel):
+    """Phase 1 guardrail classification (DESIGN.md §5 Phase 1): "A low-latency
+    Haiku classify call rejects out-of-scope inputs... before any retrieval."
+    """
+
+    in_scope: bool
+    reason: str | None = None
+
+
+class RawEntityExtraction(BaseModel):
+    """Raw LLM extraction, before deterministic entity resolution (DESIGN.md §5
+    Phase 1). team_names/player_names are as mentioned in the query (e.g.
+    "Chiefs", "Mahomes") — decompose/resolution.py resolves these to canonical
+    IDs; the LLM never picks the IDs or the target_indexes itself.
+    """
+
+    intent: Literal["spread", "total", "moneyline", "player_prop", "futures", "general"]
+    team_names: list[str]
+    player_names: list[str]
+    week: int | None
+    season: int
+    conditions: list[Condition]
