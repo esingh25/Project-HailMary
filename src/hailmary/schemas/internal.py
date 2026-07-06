@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from hailmary.schemas.contracts import Condition
+from hailmary.schemas.contracts import Citation, Condition
 
 
 class GameResult(BaseModel):
@@ -91,3 +91,17 @@ class RawEntityExtraction(BaseModel):
     week: int | None
     season: int
     conditions: list[Condition]
+
+
+class DraftReportProse(BaseModel):
+    """Sonnet's structured output — prose + claimed citations only (DESIGN.md
+    §5 Phase 4). Every other ResearchReport field (edge_analysis, line_as_of,
+    notices, metadata) is deterministic and added by synthesis/report.py after
+    this call — the LLM never computes numbers or picks a bet verdict.
+    """
+
+    summary: str
+    matchup_analysis: str
+    key_factors: list[str]
+    line_movement: str
+    citations: list[Citation]
