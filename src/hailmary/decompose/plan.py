@@ -41,23 +41,36 @@ async def decompose_query(
     haiku_model: str,
     prompt_version: str,
     pg,
+    prior_entities: QueryEntities | None = None,
 ) -> RetrievalPlan | ClarificationNeeded:
+    """`prior_entities` (DESIGN.md §8 session memory): when this turn names no
+    team/player at all, inherit the prior turn's resolved entities so a
+    follow-up like "what about his red-zone numbers?" still resolves — they're
+    already-canonical IDs, so no re-resolution is needed for the inherited
+    fields.
+    """
     guardrail = await check_in_scope(llm, haiku_model, prompt_version, raw_text)
     if not guardrail.in_scope:
         raise OutOfScopeError(guardrail.reason)
 
     raw = await extract_entities(llm, haiku_model, prompt_version, raw_text, season)
 
-    resolved_teams = resolve_teams(raw.team_names, entity_map)
+    if not raw.team_names and prior_entities and prior_entities.teams:
+        resolved_teams = prior_entities.teams
+    else:
+        resolved_teams = resolve_teams(raw.team_names, entity_map)
 
     resolved_players: list[str] = []
-    team_hint = resolved_teams[0] if len(resolved_teams) == 1 else None
-    for name in raw.player_names:
-        resolved = resolve_player(query_id, name, entity_map, team_id_hint=team_hint)
-        if isinstance(resolved, ClarificationNeeded):
-            return resolved
-        if resolved is not None:
-            resolved_players.append(resolved)
+    if not raw.player_names and prior_entities and prior_entities.players:
+        resolved_players = prior_entities.players
+    else:
+        team_hint = resolved_teams[0] if len(resolved_teams) == 1 else None
+        for name in raw.player_names:
+            resolved = resolve_player(query_id, name, entity_map, team_id_hint=team_hint)
+            if isinstance(resolved, ClarificationNeeded):
+                return resolved
+            if resolved is not None:
+                resolved_players.append(resolved)
 
     entities = QueryEntities(
         teams=resolved_teams,

@@ -31,6 +31,7 @@ class GraphState(TypedDict, total=False):
     entity_map: Any
     team_ratings: dict
     home_team_id: str | None
+    prior_entities: Any
     llm: Any
     voyage: Any
     es_client: Any
@@ -60,6 +61,7 @@ async def decompose_node(state: GraphState) -> dict:
             settings.haiku_model,
             PROMPT_VERSION,
             state["pg"],
+            prior_entities=state.get("prior_entities"),
         )
     except OutOfScopeError as exc:
         return {"status": "out_of_scope", "out_of_scope_reason": exc.reason}

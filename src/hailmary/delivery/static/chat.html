@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>HailMaryRAG</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; }
+    #log { white-space: pre-wrap; border: 1px solid #ccc; padding: 1rem; min-height: 200px; margin-bottom: 1rem; }
+    .replay-banner { background: #fffae0; border: 1px solid #e0c56a; padding: 0.5rem; margin-bottom: 1rem; }
+    input { width: 80%; padding: 0.5rem; }
+    button { padding: 0.5rem 1rem; }
+  </style>
+</head>
+<body>
+  <h1>HailMaryRAG — Research Chat</h1>
+  <div class="replay-banner">Replay mode: fixture data, no live feeds or external calls.</div>
+  <div id="log"></div>
+  <input id="input" type="text" placeholder="Is there value on KC -6.5?" />
+  <button id="send">Send</button>
+
+  <script>
+    const sessionId = crypto.randomUUID();
+    const userId = "local-user";
+    const log = document.getElementById("log");
+    const input = document.getElementById("input");
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      log.textContent += "\nYou: " + text;
+      input.value = "";
+
+      const res = await fetch("/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, session_id: sessionId, raw_text: text }),
+      });
+      const data = await res.json();
+
+      if (data.status === "out_of_scope") {
+        log.textContent += "\nAssistant: " + (data.reason || "That's outside what I can help with.");
+      } else if (data.status === "clarification_needed") {
+        log.textContent += "\nAssistant: Which one did you mean? " + JSON.stringify(data.clarification.candidate_ids);
+      } else {
+        log.textContent += "\nAssistant: " + data.report.summary + "\n" + JSON.stringify(data.report, null, 2);
+      }
+    }
+
+    document.getElementById("send").addEventListener("click", send);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+  </script>
+</body>
+</html>
