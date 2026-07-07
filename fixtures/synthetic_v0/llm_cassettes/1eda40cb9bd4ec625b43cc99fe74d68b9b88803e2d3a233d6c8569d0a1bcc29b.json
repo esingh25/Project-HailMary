@@ -1,13 +1,13 @@
 {
   "summary": "Synthetic fixture prose: the retrieved evidence below summarizes the matchup. Each claim cites the fixture chunk it came from.",
-  "matchup_analysis": "LV struggled offensively in their last outing, managing just 13 points against a top-10 defense and committing two turnovers. Buffalo's offense under Josh Allen ranks top-5 in yards per play, with Allen's dual-threat rushing providing a key red-zone advantage. Mahomes has historically excelled in primetime and Thursday-night matchups, posting a strong record and efficient passing numbers under short-week prep. Minnesota turns to backup Brandon Allen after their starter was ruled out, creating uncertainty in the passing attack for this matchup.",
+  "matchup_analysis": "LV struggled offensively in their last outing, managing just 13 points against a top-10 defense and committing two turnovers. Buffalo's offense under Josh Allen ranks top-5 in yards per play, with Allen's dual-threat rushing providing a key red-zone advantage. Mahomes has historically excelled in primetime and Thursday-night matchups, posting a strong record and efficient passing numbers under short-week prep. KC -6.5 at -108 (draftkings)",
   "key_factors": [
     "LV struggled offensively in their last outing, managing just 13 points against a top-10 defense and committing two turno",
     "Buffalo's offense under Josh Allen ranks top-5 in yards per play, with Allen's dual-threat rushing providing a key red-z",
     "Mahomes has historically excelled in primetime and Thursday-night matchups, posting a strong record and efficient passin",
-    "Minnesota turns to backup Brandon Allen after their starter was ruled out, creating uncertainty in the passing attack fo"
+    "KC -6.5 at -108 (draftkings)"
   ],
-  "line_movement": "No odds evidence was retrieved for this query.",
+  "line_movement": "KC -6.5 at -108 (draftkings)",
   "citations": [
     {
       "claim": "LV struggled offensively in their last outing, managing just 13 points against a top-10 defense and committing two turno",
@@ -25,9 +25,9 @@
       "source": "semantic_vector"
     },
     {
-      "claim": "Minnesota turns to backup Brandon Allen after their starter was ruled out, creating uncertainty in the passing attack fo",
-      "chunk_id": "doc_min_injury_context",
-      "source": "semantic_vector"
+      "claim": "KC -6.5 at -108 (draftkings)",
+      "chunk_id": "odds:2026_18_LV_KC:draftkings:spread:KC -6.5",
+      "source": "live_odds"
     }
   ]
 }

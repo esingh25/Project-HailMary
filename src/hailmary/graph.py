@@ -16,6 +16,7 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from hailmary.decompose.plan import OutOfScopeError, decompose_query
+from hailmary.decompose.resolution import home_team_for_game
 from hailmary.prompts import PROMPT_VERSION
 from hailmary.rerank.merge import merge_context
 from hailmary.retrieval.fanout import fetch_retrieved_context
@@ -120,13 +121,19 @@ async def merge_node(state: GraphState) -> dict:
 async def synthesize_node(state: GraphState) -> dict:
     settings = state["settings"]
     plan = state["plan"]
+    # Callers may pass an explicit home_team_id; otherwise derive it from the
+    # resolved game so the Elo home-field term doesn't depend on the caller
+    # knowing the schedule.
+    home_team_id = state.get("home_team_id") or home_team_for_game(
+        plan.entities.game_id, state["entity_map"]
+    )
     report = await build_report(
         state["query_id"],
         state["raw_text"],
         plan.entities,
         state["merged"],
         state["team_ratings"],
-        state["home_team_id"],
+        home_team_id,
         state["llm"],
         settings.sonnet_model,
         PROMPT_VERSION,

@@ -2,8 +2,14 @@
 
 import pytest
 
-from hailmary.decompose.resolution import resolve_player, resolve_team, resolve_teams
-from hailmary.schemas.internal import ClarificationNeeded, EntityMap, PlayerAliasEntry
+from hailmary.decompose.resolution import (
+    home_team_for_game,
+    resolve_game,
+    resolve_player,
+    resolve_team,
+    resolve_teams,
+)
+from hailmary.schemas.internal import ClarificationNeeded, EntityMap, GameEntry, PlayerAliasEntry
 
 ENTITY_MAP = EntityMap(
     team_aliases={
@@ -13,6 +19,24 @@ ENTITY_MAP = EntityMap(
         "lv": "LV",
         "raiders": "LV",
     },
+    games=[
+        GameEntry(
+            game_id="2026_18_LV_KC",
+            sport="nfl",
+            season=2026,
+            week=18,
+            home_team_id="KC",
+            away_team_id="LV",
+        ),
+        GameEntry(
+            game_id="2026_18_BUF_MIN",
+            sport="nfl",
+            season=2026,
+            week=18,
+            home_team_id="MIN",
+            away_team_id="BUF",
+        ),
+    ],
     players={
         "patrick mahomes": [
             PlayerAliasEntry(team_id="KC", player_id="mahomes_pat", full_name="Patrick Mahomes")
@@ -78,3 +102,28 @@ def test_resolve_player_never_guesses_on_collision_with_wrong_team_hint():
     the system never silently guesses."""
     result = resolve_player("q1", "Allen", ENTITY_MAP, team_id_hint="KC")
     assert isinstance(result, ClarificationNeeded)
+
+
+@pytest.mark.unit
+def test_resolve_game_matches_two_teams_regardless_of_order():
+    assert resolve_game(["KC", "LV"], 2026, ENTITY_MAP) == "2026_18_LV_KC"
+    assert resolve_game(["LV", "KC"], 2026, ENTITY_MAP) == "2026_18_LV_KC"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("teams", [[], ["KC"], ["KC", "LV", "BUF"]])
+def test_resolve_game_requires_exactly_two_teams(teams):
+    assert resolve_game(teams, 2026, ENTITY_MAP) is None
+
+
+@pytest.mark.unit
+def test_resolve_game_returns_none_when_no_shared_game_or_wrong_season():
+    assert resolve_game(["KC", "BUF"], 2026, ENTITY_MAP) is None
+    assert resolve_game(["KC", "LV"], 2025, ENTITY_MAP) is None
+
+
+@pytest.mark.unit
+def test_home_team_for_game_looks_up_schedule():
+    assert home_team_for_game("2026_18_LV_KC", ENTITY_MAP) == "KC"
+    assert home_team_for_game("unknown_game", ENTITY_MAP) is None
+    assert home_team_for_game(None, ENTITY_MAP) is None

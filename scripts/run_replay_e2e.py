@@ -91,7 +91,7 @@ async def run() -> bool:
                 "sport": "nfl",
                 "entity_map": fixture.entity_map,
                 "team_ratings": {},
-                "home_team_id": "KC",
+                "home_team_id": None,
                 "llm": llm,
                 "voyage": voyage,
                 "es_client": es,
@@ -118,6 +118,9 @@ async def run() -> bool:
                 all_ok = False
             if report.replay_mode is not True:
                 print(f"[{label}] FAILED: replay_mode should be True")
+                all_ok = False
+            if label == "q_spread" and not report.edge_analysis:
+                print(f"[{label}] FAILED: spread query must produce an edge block (PLAN.md M6)")
                 all_ok = False
             print(
                 f"[{label}] OK: {len(report.citations)} citations, "
