@@ -73,7 +73,7 @@ jobs:
 
       - name: Start Qdrant
         run: |
-          docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:v1.10.1
+          docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:v1.18.0
           sleep 5
 
       - name: Cache cross-encoder model
@@ -90,3 +90,9 @@ jobs:
           REPLAY_MODE: "true"
           REPLAY_LLM: "true"
         run: uv run python scripts/run_replay_e2e.py
+
+      - name: Integration tests
+        env:
+          REPLAY_MODE: "true"
+          REPLAY_LLM: "true"
+        run: uv run pytest -m integration -q
