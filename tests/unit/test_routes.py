@@ -4,7 +4,9 @@ Builds the app with lifespan=None and populates app.state with fakes directly
 — no real ES/Qdrant/Redis/Postgres/Anthropic needed.
 """
 
+import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -62,8 +64,8 @@ class FakeES:
 
 
 class FakeQdrant:
-    async def search(self, collection_name, query_vector, limit, query_filter=None):
-        return []
+    async def query_points(self, collection_name, query, limit, query_filter=None):
+        return SimpleNamespace(points=[])
 
     async def upsert(self, collection_name, points):
         pass
@@ -112,7 +114,7 @@ class FakePG:
         return None
 
 
-def make_app(llm: FakeLLM) -> httpx.AsyncClient:
+def make_app(llm: FakeLLM, pg: FakePG | None = None) -> httpx.AsyncClient:
     app = create_app(lifespan_fn=None)
     app.state.settings = get_settings()
     app.state.entity_map = ENTITY_MAP
@@ -122,7 +124,7 @@ def make_app(llm: FakeLLM) -> httpx.AsyncClient:
     app.state.es_client = FakeES()
     app.state.qdrant_client = FakeQdrant()
     app.state.redis_client = FakeRedis()
-    app.state.pg = FakePG()
+    app.state.pg = pg if pg is not None else FakePG()
     transport = httpx.ASGITransport(app=app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 
@@ -148,6 +150,39 @@ async def test_submit_research_happy_path_returns_report():
     body = response.json()
     assert body["status"] == "ok"
     assert body["report"]["responsible_gaming_notice"] != ""
+
+
+@pytest.mark.unit
+async def test_submit_research_registers_query_row_with_uuid_identities():
+    """§6.4: retrieval_plans/research_reports FK-reference research_queries, so
+    the intake row must be inserted (with UUID-mapped identities) before the
+    graph persists anything."""
+    llm = FakeLLM(
+        guardrail=GuardrailResult(in_scope=True),
+        extraction=RawEntityExtraction(
+            intent="general", team_names=[], player_names=[], week=None, season=2026, conditions=[]
+        ),
+        draft=DraftReportProse(
+            summary="s", matchup_analysis="m", key_factors=[], line_movement="l", citations=[]
+        ),
+    )
+    pg = FakePG()
+    async with make_app(llm, pg=pg) as client:
+        response = await client.post(
+            "/research",
+            json={"user_id": "local-user", "session_id": "s1", "raw_text": "General question?"},
+        )
+
+    assert response.status_code == 200
+    inserts = [c for c in pg.execute_calls if "INSERT INTO research_queries" in c[0]]
+    assert len(inserts) == 1
+    assert pg.execute_calls[0] == inserts[0], "research_queries row must be the first write"
+    _, (query_id, user_id, session_id, raw_text, sport) = inserts[0]
+    assert query_id == response.json()["query_id"]
+    for identity in (user_id, session_id):
+        assert uuid.UUID(identity)
+    assert raw_text == "General question?"
+    assert sport == "nfl"
 
 
 @pytest.mark.unit

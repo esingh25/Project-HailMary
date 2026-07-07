@@ -27,6 +27,29 @@ from hailmary.schemas.contracts import SessionTurn
 router = APIRouter()
 
 
+def _db_uuid(kind: str, external_id: str) -> str:
+    """§6.4 research_queries.user_id/session_id are UUID columns, but the
+    delivery API accepts arbitrary client strings (chat.html sends
+    "local-user"). Map them deterministically so the same external id is
+    always the same database identity."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"hailmary:{kind}:{external_id}"))
+
+
+async def _register_query(pg, query_id: str, payload: "ResearchRequest") -> None:
+    """Insert the §6.4 research_queries system-of-record row that
+    retrieval_plans and research_reports reference by foreign key — it must
+    exist before the graph persists either."""
+    await pg.execute(
+        "INSERT INTO research_queries (query_id, user_id, session_id, raw_text, sport) "
+        "VALUES ($1, $2, $3, $4, $5)",
+        query_id,
+        _db_uuid("user", payload.user_id),
+        _db_uuid("session", payload.session_id),
+        payload.raw_text,
+        payload.sport,
+    )
+
+
 class ResearchRequest(BaseModel):
     user_id: str
     session_id: str
@@ -51,6 +74,7 @@ async def submit_research(payload: ResearchRequest, request: Request) -> Researc
     query_id = str(uuid.uuid4())
     now = state.now or datetime.now(UTC)
 
+    await _register_query(state.pg, query_id, payload)
     prior_entities = await get_resolved_entities(state.redis_client, payload.session_id)
 
     graph_state = {
