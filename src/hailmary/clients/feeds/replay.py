@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hailmary.schemas.contracts import InjuryRecord, OddsSnapshot, SemanticDoc, StatRecord
-from hailmary.schemas.internal import EntityMap, GameResult, WeatherRecord
+from hailmary.schemas.internal import EntityMap, GameEntry, GameResult, WeatherRecord
 
 FIXTURES_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent / "fixtures"
 
@@ -41,6 +41,11 @@ class FixtureData:
         ]
         self.entity_map = EntityMap.model_validate(
             json.loads((self.dir / "entity_map.json").read_text(encoding="utf-8"))
+        ).model_copy(
+            # The schedule lives in the manifest, not entity_map.json — graft it
+            # in so Phase 1 game_id resolution sees it (extra manifest keys like
+            # venue/kickoff are ignored by GameEntry).
+            update={"games": [GameEntry.model_validate(g) for g in self.manifest["games"]]}
         )
         self.embeddings: dict = json.loads(
             (self.dir / "embeddings.json").read_text(encoding="utf-8")

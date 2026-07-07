@@ -5,11 +5,11 @@ DESIGN.md §5 Phase 1: guardrail -> extract -> resolve entities deterministicall
 delegated to the LLM" — routing.route() (M1) is the only thing that picks
 target_indexes; resolution.py (M1) is the only thing that picks canonical IDs.
 
-game_id resolution (matching entities to a specific upcoming game) needs a
-schedule-lookup mechanism not yet built — DESIGN.md doesn't fully specify this
-either. Left as None here; Phase 2's live sub-agents that need a game_id simply
-have nothing to query in that case (fanout.py already treats a missing game_id
-as "not applicable," not a failure).
+game_id resolution: an unambiguous two-team matchup is matched against the
+entity map's schedule index (resolution.resolve_game); anything else leaves
+game_id None, and Phase 2's live sub-agents that need one simply have nothing
+to query (fanout.py treats a missing game_id as "not applicable," not a
+failure).
 """
 
 import json
@@ -17,7 +17,7 @@ import json
 from hailmary.clients.llm import LLMClient
 from hailmary.decompose.extractor import extract_entities
 from hailmary.decompose.guardrail import check_in_scope
-from hailmary.decompose.resolution import resolve_player, resolve_teams
+from hailmary.decompose.resolution import resolve_game, resolve_player, resolve_teams
 from hailmary.decompose.routing import route
 from hailmary.schemas.contracts import QueryEntities, RetrievalPlan
 from hailmary.schemas.internal import ClarificationNeeded, EntityMap
@@ -75,7 +75,7 @@ async def decompose_query(
     entities = QueryEntities(
         teams=resolved_teams,
         players=resolved_players,
-        game_id=None,
+        game_id=resolve_game(resolved_teams, raw.season, entity_map),
         week=raw.week,
         season=raw.season,
     )

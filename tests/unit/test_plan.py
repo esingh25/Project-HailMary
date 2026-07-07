@@ -7,13 +7,14 @@ from hailmary.schemas.contracts import Condition, QueryEntities
 from hailmary.schemas.internal import (
     ClarificationNeeded,
     EntityMap,
+    GameEntry,
     GuardrailResult,
     PlayerAliasEntry,
     RawEntityExtraction,
 )
 
 ENTITY_MAP = EntityMap(
-    team_aliases={"kc": "KC", "chiefs": "KC"},
+    team_aliases={"kc": "KC", "chiefs": "KC", "raiders": "LV"},
     players={
         "mahomes": [
             PlayerAliasEntry(team_id="KC", player_id="mahomes_pat", full_name="Patrick Mahomes")
@@ -23,6 +24,16 @@ ENTITY_MAP = EntityMap(
             PlayerAliasEntry(team_id="MIN", player_id="allen_brandon", full_name="Brandon Allen"),
         ],
     },
+    games=[
+        GameEntry(
+            game_id="2026_18_LV_KC",
+            sport="nfl",
+            season=2026,
+            week=18,
+            home_team_id="KC",
+            away_team_id="LV",
+        )
+    ],
 )
 
 
@@ -85,9 +96,39 @@ async def test_decompose_query_happy_path_persists_and_returns_plan():
     assert plan.intent == "spread"
     assert plan.entities.teams == ["KC"]
     assert plan.entities.players == ["mahomes_pat"]
+    assert plan.entities.game_id is None  # one team resolved -> no matchup to pin
     assert "live_injury" in plan.target_indexes  # player named -> injury always included
     assert len(pg.execute_calls) == 1
     assert "INSERT INTO retrieval_plans" in pg.execute_calls[0][0]
+
+
+@pytest.mark.unit
+async def test_decompose_query_resolves_game_id_for_two_team_matchup():
+    llm = FakeLLM(
+        GuardrailResult(in_scope=True),
+        RawEntityExtraction(
+            intent="spread",
+            team_names=["Chiefs", "Raiders"],
+            player_names=[],
+            week=None,
+            season=2026,
+            conditions=[],
+        ),
+    )
+
+    plan = await decompose_query(
+        "q1",
+        "Is there value on the Chiefs -6.5 against the Raiders?",
+        2026,
+        ENTITY_MAP,
+        llm,
+        "haiku",
+        "v1",
+        FakePG(),
+    )
+
+    assert plan.entities.teams == ["KC", "LV"]
+    assert plan.entities.game_id == "2026_18_LV_KC"
 
 
 @pytest.mark.unit

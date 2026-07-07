@@ -48,11 +48,25 @@ class PlayerAliasEntry(BaseModel):
     full_name: str
 
 
+class GameEntry(BaseModel):
+    """One scheduled game in the canonical entity map, so Phase 1 resolution can
+    match two resolved teams to their game_id (DESIGN.md §5 Phase 1). Sourced
+    from the schedule feed — the fixture manifest's games list in replay mode."""
+
+    game_id: str
+    sport: str
+    season: int
+    week: int
+    home_team_id: str
+    away_team_id: str
+
+
 class EntityMap(BaseModel):
     """Canonical alias tables built by Phase 0 ingestion (DESIGN.md §5 Phase 0)."""
 
     team_aliases: dict[str, str]  # normalized alias -> team_id
     players: dict[str, list[PlayerAliasEntry]]  # normalized name -> candidate rows
+    games: list[GameEntry] = []  # schedule index for game_id resolution
 
 
 class WeatherRecord(BaseModel):
