@@ -1,0 +1,64 @@
+{
+  "team_aliases": {
+    "kc": "KC",
+    "chiefs": "KC",
+    "kansas city chiefs": "KC",
+    "lv": "LV",
+    "raiders": "LV",
+    "las vegas raiders": "LV",
+    "buf": "BUF",
+    "bills": "BUF",
+    "buffalo bills": "BUF",
+    "min": "MIN",
+    "vikings": "MIN",
+    "minnesota vikings": "MIN",
+    "uga": "UGA",
+    "georgia": "UGA",
+    "georgia bulldogs": "UGA",
+    "bama": "BAMA",
+    "alabama": "BAMA",
+    "alabama crimson tide": "BAMA"
+  },
+  "players": {
+    "patrick mahomes": [
+      {
+        "team_id": "KC",
+        "player_id": "mahomes_pat",
+        "full_name": "Patrick Mahomes"
+      }
+    ],
+    "mahomes": [
+      {
+        "team_id": "KC",
+        "player_id": "mahomes_pat",
+        "full_name": "Patrick Mahomes"
+      }
+    ],
+    "allen": [
+      {
+        "team_id": "BUF",
+        "player_id": "allen_josh",
+        "full_name": "Josh Allen"
+      },
+      {
+        "team_id": "MIN",
+        "player_id": "allen_brandon",
+        "full_name": "Brandon Allen"
+      }
+    ],
+    "josh allen": [
+      {
+        "team_id": "BUF",
+        "player_id": "allen_josh",
+        "full_name": "Josh Allen"
+      }
+    ],
+    "brandon allen": [
+      {
+        "team_id": "MIN",
+        "player_id": "allen_brandon",
+        "full_name": "Brandon Allen"
+      }
+    ]
+  }
+}

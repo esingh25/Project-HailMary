@@ -1,0 +1,40 @@
+{
+  "fixture_name": "synthetic_v0",
+  "schema_version": 1,
+  "virtual_clock": "2026-01-04T18:00:00+00:00",
+  "embedding_dim": 16,
+  "embedding_model": "synthetic-placeholder-16d",
+  "games": [
+    {
+      "game_id": "2026_18_LV_KC",
+      "sport": "nfl",
+      "season": 2026,
+      "week": 18,
+      "home_team_id": "KC",
+      "away_team_id": "LV",
+      "venue": "outdoor",
+      "kickoff": "2026-01-04T18:00:00+00:00"
+    },
+    {
+      "game_id": "2026_18_BUF_MIN",
+      "sport": "nfl",
+      "season": 2026,
+      "week": 18,
+      "home_team_id": "MIN",
+      "away_team_id": "BUF",
+      "venue": "indoor",
+      "kickoff": "2026-01-04T18:00:00+00:00"
+    },
+    {
+      "game_id": "2026_14_BAMA_UGA",
+      "sport": "cfb",
+      "season": 2026,
+      "week": 14,
+      "home_team_id": "UGA",
+      "away_team_id": "BAMA",
+      "venue": "outdoor",
+      "kickoff": "2025-12-31T18:00:00+00:00"
+    }
+  ],
+  "notes": "Hand-authored fixture (scripts/author_fixture_v0.py). Deliberately includes: line movement (KC spread/ML/total + a player prop), a mid-week injury status flip (Mahomes questionable -> probable), an outdoor-weather game (LV @ KC), and a planted surname collision (Josh Allen/BUF vs Brandon Allen/MIN)."
+}
