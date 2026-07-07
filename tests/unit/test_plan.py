@@ -3,7 +3,7 @@
 import pytest
 
 from hailmary.decompose.plan import OutOfScopeError, decompose_query
-from hailmary.schemas.contracts import Condition
+from hailmary.schemas.contracts import Condition, QueryEntities
 from hailmary.schemas.internal import (
     ClarificationNeeded,
     EntityMap,
@@ -127,3 +127,68 @@ async def test_decompose_query_drops_unresolvable_team_names_without_erroring():
         "q1", "some general query", 2026, ENTITY_MAP, llm, "haiku", "v1", FakePG()
     )
     assert plan.entities.teams == []
+
+
+@pytest.mark.unit
+async def test_decompose_query_follow_up_inherits_prior_entities_when_none_named():
+    """DESIGN.md §8: 'what about his red-zone numbers?' names no player at all —
+    it must inherit the prior turn's resolved player, not come back empty."""
+    llm = FakeLLM(
+        GuardrailResult(in_scope=True),
+        RawEntityExtraction(
+            intent="general",
+            team_names=[],
+            player_names=[],
+            week=None,
+            season=2026,
+            conditions=[],
+        ),
+    )
+    prior_entities = QueryEntities(
+        teams=["KC"], players=["mahomes_pat"], game_id=None, week=18, season=2026
+    )
+
+    plan = await decompose_query(
+        "q2",
+        "what about his red-zone numbers?",
+        2026,
+        ENTITY_MAP,
+        llm,
+        "haiku",
+        "v1",
+        FakePG(),
+        prior_entities=prior_entities,
+    )
+
+    assert plan.entities.teams == ["KC"]
+    assert plan.entities.players == ["mahomes_pat"]
+
+
+@pytest.mark.unit
+async def test_decompose_query_new_mention_overrides_prior_entities():
+    llm = FakeLLM(
+        GuardrailResult(in_scope=True),
+        RawEntityExtraction(
+            intent="general",
+            team_names=["Chiefs"],
+            player_names=[],
+            week=None,
+            season=2026,
+            conditions=[],
+        ),
+    )
+    prior_entities = QueryEntities(teams=["LV"], players=[], game_id=None, week=18, season=2026)
+
+    plan = await decompose_query(
+        "q2",
+        "and the Chiefs?",
+        2026,
+        ENTITY_MAP,
+        llm,
+        "haiku",
+        "v1",
+        FakePG(),
+        prior_entities=prior_entities,
+    )
+
+    assert plan.entities.teams == ["KC"]  # newly named team wins over inherited LV
