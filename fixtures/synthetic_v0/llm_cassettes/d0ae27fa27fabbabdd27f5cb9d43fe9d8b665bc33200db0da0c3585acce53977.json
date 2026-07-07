@@ -1,0 +1,15 @@
+{
+  "summary": "Synthetic fixture prose: the retrieved evidence below summarizes the matchup. Each claim cites the fixture chunk it came from.",
+  "matchup_analysis": "Patrick Mahomes has thrown for 4100 yards, 32 TDs, and 9 INTs this season.",
+  "key_factors": [
+    "Patrick Mahomes has thrown for 4100 yards, 32 TDs, and 9 INTs this season."
+  ],
+  "line_movement": "No odds evidence was retrieved for this query.",
+  "citations": [
+    {
+      "claim": "Patrick Mahomes has thrown for 4100 yards, 32 TDs, and 9 INTs this season.",
+      "chunk_id": "st_kc_pass_mahomes_w18",
+      "source": "stats_es"
+    }
+  ]
+}

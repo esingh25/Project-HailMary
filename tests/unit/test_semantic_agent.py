@@ -25,9 +25,9 @@ class FakeQdrant:
         self._points_by_collection = points_by_collection
         self.search_calls: list[dict] = []
 
-    async def search(self, collection_name, query_vector, query_filter, limit):
+    async def query_points(self, collection_name, query, query_filter, limit):
         self.search_calls.append({"collection_name": collection_name, "limit": limit})
-        return self._points_by_collection.get(collection_name, [])[:limit]
+        return SimpleNamespace(points=self._points_by_collection.get(collection_name, [])[:limit])
 
 
 def make_point(doc_id="d1", score=0.9, doc_type="game_recap"):
