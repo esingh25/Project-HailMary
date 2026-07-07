@@ -7,6 +7,7 @@ Qdrant, Redis, Postgres). No Docker, no Anthropic key required.
 """
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -63,8 +64,8 @@ class FakeES:
 
 
 class FakeQdrant:
-    async def search(self, collection_name, query_vector, limit, query_filter=None):
-        return []
+    async def query_points(self, collection_name, query, limit, query_filter=None):
+        return SimpleNamespace(points=[])
 
     async def upsert(self, collection_name, points):
         pass

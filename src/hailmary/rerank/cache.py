@@ -53,9 +53,10 @@ async def lookup_cache(
     """Returns the cached MergedContext on a hit, else None (including on a
     prompt_version mismatch — a stale cache entry from before a prompt change)."""
     vector = await voyage.embed_query(voyage_model, placeholder_text)
-    results = await qdrant_client.search(
-        collection_name=SEMANTIC_CACHE, query_vector=vector, limit=1
+    response = await qdrant_client.query_points(
+        collection_name=SEMANTIC_CACHE, query=vector, limit=1
     )
+    results = response.points
     if not results or results[0].score < cosine_threshold:
         return None
 

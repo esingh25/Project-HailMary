@@ -6,15 +6,15 @@ queries through the compiled graph -> assert report structure, citation
 grounding, and replay-mode stamping. Exits non-zero on any failure — this is
 what CI job 2 (.github/workflows/ci.yml) runs.
 
-NOT YET VERIFIED: requires both Docker (for ES/Qdrant/Redis/Postgres) and
-recorded Haiku/Sonnet cassettes (an Anthropic key), neither of which was
-available during this build. Written and reviewed; CI job 2 is wired to run
-it but has not yet gone green — tracked as an open follow-up alongside the
-other Docker/key-dependent items from M2-M5.
+The committed cassettes under fixtures/synthetic_v0/llm_cassettes/ are
+deterministic synthetic ones (scripts/author_cassettes_v0.py) — hand-built
+like the rest of synthetic_v0, keyless by design. When real API keys exist,
+re-record with scripts/record_cassettes.py; they are drop-in replacements.
 """
 
 import asyncio
 import sys
+import uuid
 
 from hailmary.clients.es import get_es_client
 from hailmary.clients.feeds.replay import FixtureData
@@ -27,11 +27,35 @@ from hailmary.config import get_settings
 from hailmary.graph import build_graph
 from hailmary.ingestion.scheduler import run_replay_ingestion_pass
 
+
+# §6.4 query_id columns are UUIDs; derive them deterministically from stable
+# labels so replay runs are reproducible and log lines stay readable.
+def e2e_query_id(label: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"hailmary:e2e:{label}"))
+
+
+E2E_USER_ID = str(uuid.uuid5(uuid.NAMESPACE_URL, "hailmary:e2e:user"))
+E2E_SESSION_ID = str(uuid.uuid5(uuid.NAMESPACE_URL, "hailmary:e2e:session"))
+
 CANNED_QUERIES = [
     ("q_spread", "Is there value on the Chiefs -6.5 against the Raiders?"),
     ("q_prop", "How many passing yards will Mahomes throw for?"),
     ("q_general", "What's the injury situation for the Chiefs this week?"),
 ]
+
+
+async def register_query(pg, query_id: str, raw_text: str, sport: str = "nfl") -> None:
+    """Insert the §6.4 research_queries system-of-record row that
+    retrieval_plans and research_reports reference by foreign key."""
+    await pg.execute(
+        "INSERT INTO research_queries (query_id, user_id, session_id, raw_text, sport) "
+        "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (query_id) DO NOTHING",
+        query_id,
+        E2E_USER_ID,
+        E2E_SESSION_ID,
+        raw_text,
+        sport,
+    )
 
 
 async def run() -> bool:
@@ -57,7 +81,9 @@ async def run() -> bool:
         graph = build_graph()
         all_ok = True
 
-        for query_id, raw_text in CANNED_QUERIES:
+        for label, raw_text in CANNED_QUERIES:
+            query_id = e2e_query_id(label)
+            await register_query(pg, query_id, raw_text)
             state = {
                 "query_id": query_id,
                 "raw_text": raw_text,
@@ -78,23 +104,23 @@ async def run() -> bool:
             final_state = await graph.ainvoke(state)
 
             if final_state.get("status") != "ok":
-                print(f"[{query_id}] did not reach 'ok': {final_state.get('status')}")
+                print(f"[{label}] did not reach 'ok': {final_state.get('status')}")
                 all_ok = False
                 continue
 
             report = final_state["report"]
             valid_ids = {c.chunk_id for c in final_state["merged"].ranked_chunks}
             if any(c.chunk_id not in valid_ids for c in report.citations):
-                print(f"[{query_id}] FAILED: citation references a chunk_id not in evidence")
+                print(f"[{label}] FAILED: citation references a chunk_id not in evidence")
                 all_ok = False
             if not report.responsible_gaming_notice:
-                print(f"[{query_id}] FAILED: missing responsible_gaming_notice")
+                print(f"[{label}] FAILED: missing responsible_gaming_notice")
                 all_ok = False
             if report.replay_mode is not True:
-                print(f"[{query_id}] FAILED: replay_mode should be True")
+                print(f"[{label}] FAILED: replay_mode should be True")
                 all_ok = False
             print(
-                f"[{query_id}] OK: {len(report.citations)} citations, "
+                f"[{label}] OK: {len(report.citations)} citations, "
                 f"{len(report.edge_analysis)} edge blocks"
             )
 

@@ -33,13 +33,6 @@ jobs:
 
   replay-e2e-smoke:
     runs-on: ubuntu-latest
-    # continue-on-error: this job is known-failing until fixtures/synthetic_v0/
-    # llm_cassettes/ contains real recorded Haiku/Sonnet cassettes (requires an
-    # Anthropic key never available during M2-M6's build). It's wired now per
-    # PLAN.md M6 so the moment cassettes are recorded, this job goes green
-    # without further CI changes — until then it reports honestly without
-    # blocking merges on a known, tracked gap.
-    continue-on-error: true
     services:
       postgres:
         image: postgres:16

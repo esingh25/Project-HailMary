@@ -29,8 +29,8 @@ class FakeQdrant:
         self._search_results = search_results or []
         self.upserts: list[tuple] = []
 
-    async def search(self, collection_name, query_vector, limit):
-        return self._search_results[:limit]
+    async def query_points(self, collection_name, query, limit):
+        return SimpleNamespace(points=self._search_results[:limit])
 
     async def upsert(self, collection_name, points):
         self.upserts.append((collection_name, points))

@@ -50,12 +50,12 @@ async def fetch_semantic(
     chunks: list[RetrievedChunk] = []
     collections = dict.fromkeys(collection_for_doc_type(dt) for dt in doc_types)
     for collection in collections:
-        results = await client.search(
+        response = await client.query_points(
             collection_name=collection,
-            query_vector=vector,
+            query=vector,
             query_filter=query_filter,
             limit=k,
         )
-        chunks.extend(_point_to_chunk(point, now) for point in results)
+        chunks.extend(_point_to_chunk(point, now) for point in response.points)
 
     return chunks

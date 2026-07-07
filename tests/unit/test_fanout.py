@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -30,10 +31,10 @@ class FakeQdrant:
         self._points = points or []
         self._raise_error = raise_error
 
-    async def search(self, collection_name, query_vector, query_filter, limit):
+    async def query_points(self, collection_name, query, query_filter, limit):
         if self._raise_error:
             raise RuntimeError("Qdrant is down")
-        return self._points[:limit]
+        return SimpleNamespace(points=self._points[:limit])
 
 
 class FakeVoyage:
