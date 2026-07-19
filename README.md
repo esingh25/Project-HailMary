@@ -1,2 +1,2 @@
-# HailMaryRAG
-HailMaryRAG
+# Project HailMary
+Project HailMary
