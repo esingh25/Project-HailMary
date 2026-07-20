@@ -1,8 +1,16 @@
-"""Anthropic LLM client with a cassette layer for deterministic, keyless replay.
+"""LLM client with a cassette layer for deterministic, keyless replay.
 
-DESIGN.md §5 Phases 1/4: Haiku (guardrail + extraction) and Sonnet (synthesis)
-are the only two LLM call sites in the system. Both go through this client so
-replay mode is keyless and live mode is a single, auditable call path.
+DESIGN.md §5 Phases 1/4: a fast model (guardrail + extraction) and a strong
+model (synthesis) are the only two LLM call sites in the system. Both go
+through this client so replay mode is keyless and live mode is a single,
+auditable call path.
+
+Live mode routes through instructor.from_provider, so the configured model ids
+must be provider-qualified (e.g. "google/gemini-2.5-flash",
+"anthropic/claude-sonnet-4-6"). Replay cassettes key on the model string
+as-recorded, so bare ids in existing cassettes keep replaying unchanged.
+(Provider deviation from the frozen DESIGN.md — which names Anthropic — is
+recorded in docs/AMENDMENTS.md.)
 """
 
 from pathlib import Path
@@ -41,24 +49,36 @@ class LLMClient:
             data = load_cassette(self._cassette_dir, key)
             return response_model.model_validate(data) if response_model else data
 
-        if not self._settings.anthropic_api_key:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set; cannot make a live LLM call. "
-                "Set REPLAY_LLM=true to use recorded cassettes instead."
-            )
         if response_model is None:
             raise ValueError("Live LLM calls require a response_model for structured output.")
+        if "/" not in model:
+            raise ValueError(
+                f"Live LLM calls need a provider-qualified model id like "
+                f"'google/gemini-2.5-flash', got {model!r}. "
+                "Set REPLAY_LLM=true to use recorded cassettes instead."
+            )
+        api_key = self._provider_key(model.split("/", 1)[0])
 
         import instructor
-        from anthropic import AsyncAnthropic
 
-        client = instructor.from_anthropic(AsyncAnthropic(api_key=self._settings.anthropic_api_key))
-        return await client.messages.create(
-            model=model,
+        client = instructor.from_provider(model, api_key=api_key, async_client=True)
+        return await client.chat.completions.create(
             response_model=response_model,
-            max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
+
+    def _provider_key(self, provider: str) -> str:
+        key = {
+            "google": self._settings.gemini_api_key,
+            "anthropic": self._settings.anthropic_api_key,
+        }.get(provider)
+        if not key:
+            raise RuntimeError(
+                f"No API key configured for provider {provider!r} "
+                f"(set {'GEMINI' if provider == 'google' else provider.upper()}_API_KEY, "
+                "or REPLAY_LLM=true for cassettes)."
+            )
+        return key
 
     def record(self, model: str, prompt_version: str, prompt: str, response: dict) -> None:
         """Persist a cassette for (model, prompt_version, prompt) -> response.

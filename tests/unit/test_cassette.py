@@ -6,6 +6,7 @@ from hailmary.clients.cassette import CassetteMissError, cassette_key, load_cass
 from hailmary.clients.llm import LLMClient
 from hailmary.clients.voyage import VoyageClient
 from hailmary.config import Settings
+from hailmary.schemas.internal import GuardrailResult
 
 
 @pytest.mark.unit
@@ -58,10 +59,24 @@ async def test_llm_client_replay_mode_raises_loudly_on_prompt_change(tmp_path):
 
 @pytest.mark.unit
 async def test_llm_client_live_mode_without_api_key_raises_clearly(tmp_path):
-    settings = Settings(_env_file=None, replay_llm=False, anthropic_api_key=None)
+    settings = Settings(_env_file=None, replay_llm=False, gemini_api_key=None)
     client = LLMClient(settings, tmp_path)
-    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
-        await client.complete("claude-sonnet-4-6", "v1", "write a report")
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        await client.complete(
+            "google/gemini-2.5-pro", "v1", "write a report", response_model=GuardrailResult
+        )
+
+
+@pytest.mark.unit
+async def test_llm_client_live_mode_rejects_bare_model_ids(tmp_path):
+    """Live calls must be provider-qualified (docs/AMENDMENTS.md A1); bare ids
+    only exist as cassette keys."""
+    settings = Settings(_env_file=None, replay_llm=False, gemini_api_key="fake-key")
+    client = LLMClient(settings, tmp_path)
+    with pytest.raises(ValueError, match="provider-qualified"):
+        await client.complete(
+            "claude-sonnet-4-6", "v1", "write a report", response_model=GuardrailResult
+        )
 
 
 @pytest.mark.unit

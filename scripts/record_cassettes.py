@@ -64,10 +64,12 @@ async def record_all(llm: LLMClient, haiku_model: str) -> None:
 
 if __name__ == "__main__":
     settings = get_settings()
-    if settings.replay_llm or not settings.anthropic_api_key:
+    if settings.replay_llm or not (settings.gemini_api_key or settings.anthropic_api_key):
         raise SystemExit(
-            "Set REPLAY_LLM=false and a real ANTHROPIC_API_KEY before running — "
-            "this script must talk to the live API to produce real cassettes."
+            "Set REPLAY_LLM=false and a provider API key (GEMINI_API_KEY or "
+            "ANTHROPIC_API_KEY) before running — this script must talk to the live "
+            "API to produce real cassettes. Model ids must be provider-qualified, "
+            "e.g. HAIKU_MODEL=google/gemini-2.5-flash (see docs/AMENDMENTS.md)."
         )
     cassette_dir = FIXTURES_ROOT / settings.fixture_name / "llm_cassettes"
     client = LLMClient(settings, cassette_dir)

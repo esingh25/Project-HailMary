@@ -26,10 +26,26 @@ async def _refresh_live_odds(
     cached: MergedContext, redis_client, game_id: str | None, now: datetime
 ) -> MergedContext:
     """Live-odds chunks are never served from cache — always re-fetched, even on
-    a cache hit (a stale line poisons the edge math)."""
-    non_odds = [c for c in cached.ranked_chunks if c.source != "live_odds"]
+    a cache hit (a stale line poisons the edge math).
+
+    Refresh is in-position by chunk_id (odds chunk_ids are stable natural keys),
+    so a cache hit reproduces the miss path's chunk ordering. Ordering matters:
+    the writer prompt is rendered from this order, and in replay mode an
+    identical prompt is what makes the recorded cassette hit again on a repeat
+    query. Odds chunks that vanished from the live cache are dropped; brand-new
+    ones append at the end."""
     fresh_odds = await fetch_odds(redis_client, game_id, now) if game_id else []
-    return cached.model_copy(update={"ranked_chunks": non_odds + fresh_odds, "cache_hit": True})
+    fresh_by_id = {c.chunk_id: c for c in fresh_odds}
+
+    refreshed = []
+    for chunk in cached.ranked_chunks:
+        if chunk.source != "live_odds":
+            refreshed.append(chunk)
+        elif chunk.chunk_id in fresh_by_id:
+            refreshed.append(fresh_by_id.pop(chunk.chunk_id))
+    refreshed.extend(fresh_by_id.values())
+
+    return cached.model_copy(update={"ranked_chunks": refreshed, "cache_hit": True})
 
 
 async def merge_context(

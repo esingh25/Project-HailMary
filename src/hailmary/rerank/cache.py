@@ -87,7 +87,13 @@ async def store_cache(
     now: datetime,
 ) -> None:
     """Persist a freshly-built MergedContext under its placeholder-form query.
-    Live-odds chunks are stripped first — they must never be served stale."""
+
+    Live-odds chunks are stored too, but only as position placeholders: the hit
+    path (merge._refresh_live_odds) always replaces their content from the live
+    cache — or drops them — before anything is served, so a stale line can
+    never reach synthesis. Keeping their position is what lets a cache hit
+    reproduce the miss path's chunk ordering (and therefore the same writer
+    prompt, which replay cassettes key on)."""
     vector = await voyage.embed_query(voyage_model, placeholder_text)
     point_id = str(uuid.uuid4())
 
@@ -98,16 +104,13 @@ async def store_cache(
         ],
     )
 
-    cacheable = merged.model_copy(
-        update={"ranked_chunks": [c for c in merged.ranked_chunks if c.source != "live_odds"]}
-    )
     await pg.execute(
         "INSERT INTO semantic_cache_index "
         "(placeholder_text, qdrant_point_id, merged_context, prompt_version, created_at) "
         "VALUES ($1, $2, $3, $4, $5)",
         placeholder_text,
         point_id,
-        cacheable.model_dump_json(),
+        merged.model_dump_json(),
         prompt_version,
         now,
     )

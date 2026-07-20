@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from hailmary.clients.cassette import CassetteMissError
 from hailmary.config import get_settings
 from hailmary.delivery.app import create_app
 from hailmary.schemas.internal import (
@@ -183,6 +184,24 @@ async def test_submit_research_registers_query_row_with_uuid_identities():
         assert uuid.UUID(identity)
     assert raw_text == "General question?"
     assert sport == "nfl"
+
+
+@pytest.mark.unit
+async def test_submit_research_returns_503_on_replay_cassette_miss():
+    """A novel query in keyless replay mode degrades with an explanation, not a 500."""
+
+    class MissingCassetteLLM:
+        async def complete(self, *args, **kwargs):
+            raise CassetteMissError("no cassette recorded for this prompt")
+
+    async with make_app(MissingCassetteLLM()) as client:
+        response = await client.post(
+            "/research",
+            json={"user_id": "u1", "session_id": "s1", "raw_text": "some novel question?"},
+        )
+
+    assert response.status_code == 503
+    assert "recorded demo queries" in response.json()["detail"]
 
 
 @pytest.mark.unit
