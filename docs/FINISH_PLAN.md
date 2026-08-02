@@ -81,9 +81,14 @@ Read this section before touching anything. It binds both the implementer and th
 
 - Windows 11, PowerShell. Package manager is `uv` — always `uv run <cmd>`, never bare
   `python`/`pytest`.
-- **Docker Desktop is NOT installed.** Integration tests and the replay E2E cannot run
-  locally. Phases A–C do not need them; Phase D onward does. Never claim a tier passed
-  that you could not run.
+- **Docker Desktop is installed as of 2026-08-02** (v4.84.0, engine 29.6.2, Compose v5.3.1).
+  It sits at `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin` — a **per-user** install, not
+  `C:\Program Files\Docker`. That directory is on the *User* PATH, so any shell started before
+  the install will not see it; prepend it to `$env:PATH` for the command, or `docker` resolves
+  but the `docker-credential-desktop` helper does not and image pulls fail with
+  `error getting credentials`. All four containers come up healthy in well under a minute
+  (ES has a 30s start period). Integration tier and replay E2E now run locally — but still
+  never claim a tier passed that you did not actually run.
 - No API keys configured.
 - Remote is HTTPS. SSH host-key auth fails on this machine — do not "fix" the remote URL.
 
@@ -757,6 +762,41 @@ uv run python scripts/run_replay_e2e.py
 
 **Done means:** four containers healthy; integration tier green; replay E2E prints 3 OK; every
 Phase B/C BLOCKED item resolved to PASS or escalated.
+
+### D1 partial run — 2026-08-02, after B1 only
+
+Docker arrived early, so D1 was run against a tree containing **B1 and nothing else from
+Phases B/C**. Four containers healthy, `0001_init.sql` applied, `pytest -m integration` 6
+passed, replay E2E 3 OK. Recorded results:
+
+- **B1 — PASS, verified end-to-end.** The E2E logged `Loaded 4 team ratings for nfl/2026`,
+  closing the open question of whether the fixture supplies ratings. Stored
+  `research_reports` row for `q_spread`:
+
+  | market | selection | odds | implied | model_probability | EV | assessment |
+  |---|---|---|---|---|---|---|
+  | spread | KC -6.5 | −108 | 0.5192 | **0.865555** | **+66.70%** | value |
+  | moneyline | KC | −280 | 0.7368 | **0.865555** | +17.47% | value |
+  | total | Over 46.5 | −105 | 0.5122 | None | None | insufficient_data |
+
+  Ratings read back: KC 1629.2504, LV 1370.7496 (BUF 1642.75, MIN 1357.25). The
+  home-field-only artifact 0.5925/+13.11% is gone, and `total` correctly falls outside
+  `COVERED_MARKETS`. **CI job 2 is not at risk** — the spread query still emits edge blocks.
+
+- **B2 — CONFIRMED, still broken (expected; not yet implemented).** Reproduced directly:
+  importing `dashboard.app`, taking `_pg_connection()`, then calling a query through
+  `asyncio.run` raises
+  `RuntimeError: Task ... got Future ... attached to a different loop` from
+  `asyncpg/protocol/protocol.pyx:165`. The audit's code-reading is now a reproduction.
+
+- **Two findings sharpened by having a live database:**
+  - `events` table has **0 rows** after a full E2E — confirms C1 (`record_event` has no caller).
+  - `session_turns` has **0 rows** — confirms the E8 item that nothing ever inserts one.
+  - `odds_archive` has **11 rows**, but the ingestion summary reported
+    `odds_<game_id>: 0` for all three games and `record_ingestion` logged `records=0`.
+    **The archive write succeeds while its own count lies.** Not in B1's scope; add to the
+    Phase D backlog — a monitoring path that reports 0 for successful work is worse than
+    no monitoring.
 
 ---
 
