@@ -300,6 +300,95 @@ async def test_build_report_uncovered_market_reads_insufficient_data():
     assert report.edge_analysis[0].assessment == "insufficient_data"
 
 
+async def _spread_report(team_ratings, home_team_id, teams=("KC", "LV")):
+    """Run build_report over a single KC -6.5 spread chunk and return the edge block."""
+    entities = QueryEntities(teams=list(teams), players=[], game_id="g1", week=18, season=2026)
+    merged = MergedContext(
+        query_id="q1",
+        ranked_chunks=[make_odds_chunk()],
+        cache_hit=False,
+        dropped_stale=0,
+        rerank_model="m",
+    )
+    draft = DraftReportProse(
+        summary="s",
+        matchup_analysis="m",
+        key_factors=[],
+        line_movement="l",
+        citations=[Citation(claim="a", chunk_id="odds1", source="live_odds")] * 2,
+    )
+    report = await build_report(
+        "q1",
+        "Is there value on KC -6.5?",
+        entities,
+        merged,
+        team_ratings=team_ratings,
+        home_team_id=home_team_id,
+        llm=FakeLLM([draft]),
+        sonnet_model="claude-sonnet-4-6",
+        prompt_version="v1",
+        elo_config=EloConfig(),
+        edge_config=EdgeConfig(),
+        replay_mode=True,
+        sources_unavailable=[],
+        now=NOW,
+    )
+    return report.edge_analysis[0]
+
+
+# The number the old 1500.0 defaults produced for *every* home team in the
+# league, in every spread and moneyline market: win_probability(1500, 1500,
+# is_home=True) with home_field=65 and logistic_scale=400.
+HOME_FIELD_ONLY_ARTIFACT = 0.5925
+
+
+@pytest.mark.unit
+async def test_unrated_matchup_reads_insufficient_data_not_a_1500_default():
+    """Regression for the Elo-defaulting bug. With no ratings loaded, both teams
+    used to default to 1500, leaving home field as the only input: p=0.5925,
+    EV +13.11%, assessment 'value' — on any home team against any opponent.
+    Missing ratings must degrade honestly instead."""
+    edge = await _spread_report(team_ratings={}, home_team_id="KC")
+
+    assert edge.model_probability is None
+    assert edge.expected_value_pct is None
+    assert edge.assessment == "insufficient_data"
+
+
+@pytest.mark.unit
+async def test_partially_rated_matchup_reads_insufficient_data():
+    """One known rating is not enough — a rating gap needs both sides. Defaulting
+    only the opponent would still fabricate the gap."""
+    edge = await _spread_report(team_ratings={"KC": 1600.0}, home_team_id="KC")
+
+    assert edge.model_probability is None
+    assert edge.assessment == "insufficient_data"
+
+
+@pytest.mark.unit
+async def test_model_probability_tracks_the_rating_gap_not_home_field():
+    """The same fixture matchup, played at each team's home, must price
+    differently — and neither may land on the home-field-only artifact. Under
+    the bug both directions returned exactly 0.5925/'value'."""
+    kc_at_home = await _spread_report(
+        team_ratings={"KC": 1600.0, "LV": 1450.0}, home_team_id="KC", teams=("KC", "LV")
+    )
+    lv_at_home = await _spread_report(
+        team_ratings={"KC": 1600.0, "LV": 1450.0}, home_team_id="LV", teams=("LV", "KC")
+    )
+
+    assert kc_at_home.model_probability == pytest.approx(0.7752, abs=1e-4)
+    assert lv_at_home.model_probability == pytest.approx(0.3801, abs=1e-4)
+    assert kc_at_home.model_probability != lv_at_home.model_probability
+    for edge in (kc_at_home, lv_at_home):
+        assert edge.model_probability != pytest.approx(HOME_FIELD_ONLY_ARTIFACT, abs=1e-3)
+
+    # The weaker home team must not be reported as value — the exact inversion
+    # the bug produced (it called Las Vegas at home against Kansas City "value").
+    assert kc_at_home.assessment == "value"
+    assert lv_at_home.assessment == "no_value"
+
+
 @pytest.mark.unit
 async def test_build_report_discloses_sources_unavailable():
     entities = QueryEntities(teams=[], players=[], game_id=None, week=None, season=2026)

@@ -100,12 +100,20 @@ class FakeRedis:
 
 
 class FakePG:
-    def __init__(self):
+    def __init__(self, team_ratings: dict[str, float] | None = None):
         self.execute_calls: list[tuple] = []
+        self.fetch_calls: list[tuple] = []
         self.reports: dict[str, str] = {}
+        self.team_ratings = team_ratings or {}
 
     async def execute(self, query, *args):
         self.execute_calls.append((query, args))
+
+    async def fetch(self, query, *args):
+        self.fetch_calls.append((query, args))
+        if "team_ratings" in query:
+            return [{"team_id": t, "rating": r} for t, r in self.team_ratings.items()]
+        return []
 
     async def fetchrow(self, query, *args):
         if "research_reports" in query:
@@ -183,6 +191,39 @@ async def test_submit_research_registers_query_row_with_uuid_identities():
         assert uuid.UUID(identity)
     assert raw_text == "General question?"
     assert sport == "nfl"
+
+
+@pytest.mark.unit
+async def test_submit_research_loads_team_ratings_for_the_requested_sport_and_season():
+    """The edge math's only rating source is this read. Before it existed the
+    route passed a hardcoded empty dict and report.py defaulted both sides to
+    1500, so every home team priced out as 'value' regardless of opponent."""
+    llm = FakeLLM(
+        guardrail=GuardrailResult(in_scope=True),
+        extraction=RawEntityExtraction(
+            intent="general", team_names=[], player_names=[], week=None, season=2026, conditions=[]
+        ),
+        draft=DraftReportProse(
+            summary="s", matchup_analysis="m", key_factors=[], line_movement="l", citations=[]
+        ),
+    )
+    pg = FakePG(team_ratings={"KC": 1600.0, "LV": 1450.0})
+    async with make_app(llm, pg=pg) as client:
+        response = await client.post(
+            "/research",
+            json={
+                "user_id": "u1",
+                "session_id": "s1",
+                "raw_text": "General question?",
+                "sport": "nfl",
+                "season": 2026,
+            },
+        )
+
+    assert response.status_code == 200
+    ratings_reads = [c for c in pg.fetch_calls if "team_ratings" in c[0]]
+    assert len(ratings_reads) == 1, "the query path must read team_ratings exactly once"
+    assert ratings_reads[0][1] == ("nfl", 2026), "must scope the read to the requested sport/season"
 
 
 @pytest.mark.unit

@@ -50,10 +50,19 @@ def _model_probability_for_matchup(
     if len(entities.teams) != 2:
         return None
     subject, opponent = entities.teams[0], entities.teams[1]
+    # No default rating. If either side is unrated the Elo difference is not
+    # knowable, and a nominal 1500-vs-1500 stand-in would not be a neutral
+    # answer — it collapses to home field alone, which prices out as a real
+    # edge on whichever team happens to be at home. Returning None makes
+    # build_edge_analysis emit assessment="insufficient_data" instead.
+    subject_rating = team_ratings.get(subject)
+    opponent_rating = team_ratings.get(opponent)
+    if subject_rating is None or opponent_rating is None:
+        return None
     is_home = home_team_id == subject if home_team_id else False
     return win_probability(
-        team_ratings.get(subject, 1500.0),
-        team_ratings.get(opponent, 1500.0),
+        subject_rating,
+        opponent_rating,
         is_home,
         elo_config,
         elo_config.logistic_scale,

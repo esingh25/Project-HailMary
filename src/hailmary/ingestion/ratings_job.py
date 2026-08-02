@@ -13,19 +13,9 @@ import asyncpg
 from hailmary.clients.feeds.base import FeedClient
 from hailmary.config import EloConfig
 from hailmary.ingestion.elo import update
+from hailmary.ratings import load_team_ratings
 
 SUPPORTED_SPORTS = ("nfl", "cfb")
-
-
-async def _load_current_ratings(
-    pg: asyncpg.Connection, sport: str, season: int
-) -> dict[str, float]:
-    rows = await pg.fetch(
-        "SELECT team_id, rating FROM team_ratings WHERE sport = $1 AND season = $2",
-        sport,
-        season,
-    )
-    return {row["team_id"]: row["rating"] for row in rows}
 
 
 async def _upsert_ratings(
@@ -68,7 +58,7 @@ async def run_ratings_job(
         game_results = await feed.get_game_results(sport)
         if not game_results:
             continue
-        current = await _load_current_ratings(pg, sport, season)
+        current = await load_team_ratings(pg, sport, season)
         updated = update(current, game_results, config)
         await _upsert_ratings(pg, sport, season, updated, as_of)
         results[sport] = updated

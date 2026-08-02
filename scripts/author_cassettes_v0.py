@@ -35,6 +35,7 @@ from hailmary.clients.voyage import VoyageClient
 from hailmary.config import get_settings
 from hailmary.graph import build_graph
 from hailmary.ingestion.scheduler import run_replay_ingestion_pass
+from hailmary.ratings import load_team_ratings
 from hailmary.schemas.internal import DraftReportProse, GuardrailResult, RawEntityExtraction
 
 # Hand-written Phase 1 outputs per canned query — the synthetic equivalent of
@@ -197,6 +198,10 @@ async def author() -> bool:
 
     try:
         await run_replay_ingestion_pass(fixture, es, qdrant, redis_client, pg, settings)
+        # Mirror the E2E's state exactly. Ratings do not reach any prompt — the
+        # writer sees only the query and the evidence chunks — so this cannot
+        # change a cassette key; it just keeps the two scripts in step.
+        team_ratings = await load_team_ratings(pg, "nfl", 2026)
         graph = build_graph()
 
         for label, raw_text in CANNED_QUERIES:
@@ -208,7 +213,7 @@ async def author() -> bool:
                 "season": 2026,
                 "sport": "nfl",
                 "entity_map": fixture.entity_map,
-                "team_ratings": {},
+                "team_ratings": team_ratings,
                 "home_team_id": None,
                 "llm": llm,
                 "voyage": voyage,

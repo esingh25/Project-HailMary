@@ -22,6 +22,7 @@ from hailmary.delivery.sessions import (
     store_resolved_entities,
 )
 from hailmary.graph import build_graph
+from hailmary.ratings import load_team_ratings
 from hailmary.schemas.contracts import SessionTurn
 
 router = APIRouter()
@@ -76,6 +77,9 @@ async def submit_research(payload: ResearchRequest, request: Request) -> Researc
 
     await _register_query(state.pg, query_id, payload)
     prior_entities = await get_resolved_entities(state.redis_client, payload.session_id)
+    # Phase 4's edge math is only as good as these — an empty mapping means every
+    # spread and moneyline reads "insufficient_data" rather than a fabricated number.
+    team_ratings = await load_team_ratings(state.pg, payload.sport, payload.season)
 
     graph_state = {
         "query_id": query_id,
@@ -83,7 +87,7 @@ async def submit_research(payload: ResearchRequest, request: Request) -> Researc
         "season": payload.season,
         "sport": payload.sport,
         "entity_map": state.entity_map,
-        "team_ratings": {},
+        "team_ratings": team_ratings,
         "home_team_id": None,
         "prior_entities": prior_entities,
         "llm": state.llm,

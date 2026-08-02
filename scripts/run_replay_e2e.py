@@ -26,6 +26,7 @@ from hailmary.clients.voyage import VoyageClient
 from hailmary.config import get_settings
 from hailmary.graph import build_graph
 from hailmary.ingestion.scheduler import run_replay_ingestion_pass
+from hailmary.ratings import load_team_ratings
 
 
 # §6.4 query_id columns are UUIDs; derive them deterministically from stable
@@ -78,6 +79,12 @@ async def run() -> bool:
         summary = await run_replay_ingestion_pass(fixture, es, qdrant, redis_client, pg, settings)
         print(f"Ingestion summary: {summary}")
 
+        # The ingestion pass above ran the Elo job, so these rows exist by now.
+        # Read them the same way the live query path does — with an empty
+        # mapping the spread query's edge block would be a home-field artifact.
+        team_ratings = await load_team_ratings(pg, "nfl", 2026)
+        print(f"Loaded {len(team_ratings)} team ratings for nfl/2026")
+
         graph = build_graph()
         all_ok = True
 
@@ -90,7 +97,7 @@ async def run() -> bool:
                 "season": 2026,
                 "sport": "nfl",
                 "entity_map": fixture.entity_map,
-                "team_ratings": {},
+                "team_ratings": team_ratings,
                 "home_team_id": None,
                 "llm": llm,
                 "voyage": voyage,
