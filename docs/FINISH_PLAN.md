@@ -1001,14 +1001,42 @@ Also fix, while here:
 - `get_feed_client` constructs `LiveFeedClient` **without `scrape_sources`**, so the curated
   scraper can never return a document.
 - `_consume_budget` in `odds_api.py` is a non-atomic SELECT-then-UPDATE; concurrent callers can
-  overshoot the "hard" monthly cap. Make it atomic.
+  overshoot the "hard" monthly cap. Make it atomic. **Re-confirmed by the A2 security review
+  (2026-08-02), which added two details:**
+  - The `SELECT` has no `FOR UPDATE`, there is no enclosing transaction, and the `UPDATE` writes
+    an **absolute** `calls_used` with no optimistic guard (`WHERE calls_used = <value read>`).
+    Two concurrent callers at 499/500 both read, both pass `try_consume`, both make the paid
+    call, and both write 500 — one increment silently lost, the "hard" cap exceeded with the
+    accounting showing nothing. `budget.py::try_consume` itself is correct pure arithmetic; the
+    defect is entirely in this wrapper. **A2's `asyncio.gather` over games is exactly the shape
+    that triggers it**, so fix the guard *before* adding the per-game loop above, not after.
+  - **Budget is debited before the HTTP call is attempted, with no rollback.** A DNS failure,
+    refused connection, or client-side TLS error permanently burns a budget slot for a request
+    that never reached the vendor. Either debit after a confirmed response, or compensate on
+    failure.
+  - No `FOR UPDATE` / advisory-lock / transaction pattern exists anywhere in `src/`, so there is
+    no established convention to copy — whatever is chosen here sets it.
 - **`api_budget` has no seed row anywhere**, so the guard fails closed with a setup error on the
   first live call, and the Going-live runbook never mentions seeding. Add seeding + a runbook step.
 - `test_odds_budget_guard_refuses_before_any_http` **never calls `fetch_odds`** — it does not
   test its own name. Rewrite it to assert no HTTP call is issued when over budget.
+- **Harden `feeds/scraper.py::fetch_docs` before wiring `scrape_sources`** — new finding from the
+  A2 security review, not previously in this plan:
+  - `source["url"]` is fetched with **no scheme or host validation** — no http(s)-only allowlist,
+    no denylist for private/loopback/link-local addresses (e.g. the `169.254.169.254` cloud
+    metadata endpoint) — and `follow_redirects=True`, so even a vetted external URL can redirect
+    to an internal target with nothing in the code to stop it. A straightforward SSRF primitive
+    the moment the curation list comes from anywhere less than a fully trusted operator.
+  - `response.text` is materialized in full before `strip_html(...)[:MAX_DOC_CHARS]` truncates,
+    with **no `Content-Length` check and no streaming cap** — an oversized body is unbounded
+    memory during ingestion.
+  - Both are currently gated only by the docstring's claim that sources are "config-owned and
+    tiny." That is a convention, not a control. **Not reachable today** (`scrape_sources`
+    defaults to `[]` and nothing populates it), which is precisely why this is cheap to fix now
+    and expensive to fix after E2 wires it.
 
 **Done means:** `REPLAY_MODE=false` demonstrably changes ingestion behavior; the budget guard
-test actually exercises the guard.
+test actually exercises the guard; the scraper validates scheme and host and caps response size.
 
 ## Task E3 — Re-embed the corpus
 
