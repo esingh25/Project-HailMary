@@ -148,7 +148,7 @@ uv run pytest -m integration -q     # dockerized stores, replay mode, no keys
 uv run python scripts/run_replay_e2e.py   # CI-gating end-to-end replay smoke
 ```
 
-- **Unit** (`tests/unit/`, 36 files): edge math vs hand-computed cases (-110 → 0.5238),
+- **Unit** (`tests/unit/`, 38 files): edge math vs hand-computed cases (-110 → 0.5238),
   Elo symmetry/monotonicity, the exhaustive intent-routing matrix, freshness TTLs on a
   virtual clock, dedup/decay ordering, citation-guard strip/regenerate/fallback paths,
   cassette keying, budget arithmetic, contract round-trips. The rerank pipeline is
