@@ -592,6 +592,21 @@ Recompute `dropped_stale` for the served context rather than inheriting the cach
 **Add tests** asserting the hit path and the miss path produce the **same length and the same
 order** for the same inputs. That invariant is what the docstrings claim and nothing checks.
 
+### Reproduced 2026-08-02 — this is now observed, not inferred
+
+Running `scripts/run_replay_e2e.py` a second time against a **warm semantic cache** fails with
+`CassetteMissError`. The cassette key is `SHA-256(model, prompt_version, prompt)` and the writer
+prompt is rendered from the ranked chunk list, so this is direct evidence that **the hit path
+produces a materially different context than the miss path** — different enough to change the
+rendered prompt. That is a much sharper statement of the defect than "different length and order",
+and it hands B3 a ready-made regression test: *the same query must render the same writer prompt
+whether it is served from cache or not.*
+
+Note the merge (A2) already improved this: the M8 branch made `_refresh_live_odds` refresh odds
+**in position by `chunk_id`** rather than appending them, explicitly to keep cache hits
+prompt-stable. The remaining gap is the missing `gate()` + re-truncate, which is what B3 fixes.
+Verify against the post-merge version — do not re-fix the ordering.
+
 **Done means:** standard gate green; new order/length tests fail against reverted code; the
 docstring claims in `merge.py` and `cache.py` are either true or corrected.
 
@@ -930,6 +945,25 @@ passed, replay E2E 3 OK. Recorded results:
     **The archive write succeeds while its own count lies.** Not in B1's scope; add to the
     Phase D backlog — a monitoring path that reports 0 for successful work is worse than
     no monitoring.
+
+### Found during A2 — the replay E2E is not idempotent against a persistent database
+
+`decompose/plan.py` inserts into `retrieval_plans` with a bare `INSERT` and **no
+`ON CONFLICT`** clause, while `run_replay_e2e.py` derives its `query_id`s deterministically via
+`uuid5` from stable labels. So a second run against the same database dies on
+`asyncpg.exceptions.UniqueViolationError: duplicate key value violates unique constraint
+"retrieval_plans_pkey"`. Note `register_query` *does* guard its `research_queries` insert with
+`ON CONFLICT (query_id) DO NOTHING` — the guard was applied to one of the two writes and not
+the other.
+
+**CI has never caught this** because its service containers are destroyed after every run, so
+the database is always fresh. It only bites local iteration, where the fix is currently
+`docker compose down -v` between runs — which also destroys the semantic cache and thereby
+masks the B3 reproduction above.
+
+Add `ON CONFLICT (query_id) DO NOTHING` (or `DO UPDATE`) to the `retrieval_plans` insert. Small,
+self-contained, and it makes local verification repeatable — which matters more now that Docker
+is available and every task is expected to verify locally.
 
 ---
 
