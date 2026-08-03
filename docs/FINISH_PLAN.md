@@ -1020,8 +1020,23 @@ Also fix, while here:
   first live call, and the Going-live runbook never mentions seeding. Add seeding + a runbook step.
 - `test_odds_budget_guard_refuses_before_any_http` **never calls `fetch_odds`** — it does not
   test its own name. Rewrite it to assert no HTTP call is issued when over budget.
-- **Harden `feeds/scraper.py::fetch_docs` before wiring `scrape_sources`** — new finding from the
-  A2 security review, not previously in this plan:
+- **Close the redirect gap in `feeds/scraper.py` before wiring `scrape_sources`.** The scheme/host
+  guard, the `100.64.0.0/10` range, the trailing-dot normalisation and the streaming byte cap all
+  landed during A2. **One gap was deliberately left open**, confirmed by the round-2 security
+  review: `follow_redirects=True` means httpx resolves the entire redirect chain *inside*
+  `client.stream(...)`, so `assert_safe_url` on the landed URL runs **after** those requests were
+  already sent. It prevents an internal response becoming a stored document; it does **not**
+  prevent the outbound request. A curated page that later redirects to `169.254.169.254` still
+  produces a live connection.
+
+  Fix: `follow_redirects=False`, then follow hops manually, validating each `Location` before
+  requesting it, with a hop limit. Deferred because it changes redirect behaviour for legitimate
+  sources and needs a test double that actually exercises redirect-following — the current fake
+  returns a pre-baked landed URL and so cannot catch this class of bug at all. **Not reachable
+  today** (`scrape_sources` defaults to `[]`).
+
+- *(Historical — the rest of this finding was fixed during A2, kept for context)* the original
+  A2 security review reported:
   - `source["url"]` is fetched with **no scheme or host validation** — no http(s)-only allowlist,
     no denylist for private/loopback/link-local addresses (e.g. the `169.254.169.254` cloud
     metadata endpoint) — and `follow_redirects=True`, so even a vetted external URL can redirect

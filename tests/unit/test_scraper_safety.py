@@ -58,11 +58,33 @@ def test_non_http_schemes_are_refused(url):
         "http://[::1]/admin",
         "http://0.0.0.0/",
         "http://metadata.google.internal/computeMetadata/v1/",
+        # RFC 6598 shared address space. Python's ipaddress reports is_private=False
+        # here, so the flag checks alone let it through — 100.100.100.200 is Alibaba
+        # Cloud's live instance-metadata endpoint.
+        "http://100.100.100.200/latest/meta-data/",
+        "http://100.64.0.1/",
+        "http://[::ffff:100.100.100.200]/latest/meta-data/",
+        # A trailing dot is the same host to DNS but a different string to a blocklist.
+        "http://localhost./admin",
+        "http://metadata.google.internal./computeMetadata/v1/",
     ],
 )
 def test_internal_targets_are_refused(url):
     with pytest.raises(UnsafeSourceURLError):
         assert_safe_url(url)
+
+
+@pytest.mark.unit
+def test_shared_address_space_is_not_caught_by_the_stdlib_private_flag():
+    """Documents *why* BLOCKED_NETWORKS has to exist: if this assertion ever starts
+    failing because the stdlib began flagging 100.64/10, the extra range is
+    redundant and can go. Until then, removing it reopens Alibaba's metadata IP."""
+    import ipaddress
+
+    address = ipaddress.ip_address("100.100.100.200")
+    assert not address.is_private
+    assert not address.is_reserved
+    assert not address.is_link_local
 
 
 @pytest.mark.unit

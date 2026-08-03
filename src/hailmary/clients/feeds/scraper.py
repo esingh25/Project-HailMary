@@ -6,12 +6,18 @@ rows keyed by content hash. The source list is deliberately config-owned and
 tiny: this is a curated feed, not a crawler.
 
 "The list is curated" is a convention, not a control, so it is not relied on:
-every URL is checked for an http(s) scheme and a non-internal host before the
-request, the post-redirect URL is checked again, and the body is read with a
-hard byte cap. Without those, a single edited config row (or a redirect from an
-otherwise-legitimate page) turns this into an SSRF primitive against anything
-the host can reach — cloud metadata endpoints included — and an oversized body
-is unbounded memory during ingestion.
+every configured URL is checked for an http(s) scheme and a non-internal host
+*before* any request is issued, and the body is read with a hard byte cap.
+
+Known limit, deliberately not closed here. `follow_redirects=True` means httpx
+resolves the whole redirect chain internally before returning, so the
+`assert_safe_url` on the landed URL runs *after* those requests were already
+sent. It stops an internal response becoming a stored document; it does not
+stop the outbound request. Closing that needs `follow_redirects=False` plus
+manual per-hop validation, which changes redirect behaviour for legitimate
+sources and is scheduled with the task that actually wires `scrape_sources`
+(FINISH_PLAN.md E2). Until then this is defence in depth over the curated list,
+not a complete SSRF control — and nothing calls this code yet.
 """
 
 import ipaddress
@@ -29,6 +35,15 @@ MAX_DOC_CHARS = 8000
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 BLOCKED_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "metadata.google.internal"})
+
+# Ranges that Python's ipaddress flags do NOT cover but that must still be refused.
+# 100.64.0.0/10 is RFC 6598 shared address space: `is_private` returns False for it,
+# yet 100.100.100.200 is Alibaba Cloud's live instance-metadata endpoint. Without this
+# entry the scheme/flag checks below let a metadata address through untouched.
+BLOCKED_NETWORKS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("::ffff:100.64.0.0/106"),  # the IPv4-mapped IPv6 form
+)
 
 
 class UnsafeSourceURLError(ValueError):
@@ -49,6 +64,9 @@ def assert_safe_url(url: str) -> None:
         raise UnsafeSourceURLError(f"Refusing non-http(s) source URL scheme: {parts.scheme!r}")
 
     host = (parts.hostname or "").lower()
+    # A trailing dot is a fully-qualified form that resolves identically, so strip it
+    # before matching — otherwise "localhost." walks straight past the name blocklist.
+    host = host.rstrip(".")
     if not host:
         raise UnsafeSourceURLError(f"Source URL has no host: {url!r}")
     if host in BLOCKED_HOSTNAMES:
@@ -62,11 +80,14 @@ def assert_safe_url(url: str) -> None:
     if (
         address.is_private
         or address.is_loopback
-        or address.is_link_local  # includes 169.254.169.254, the cloud metadata endpoint
+        or address.is_link_local  # includes 169.254.169.254, AWS/GCP/Azure metadata
         or address.is_reserved
         or address.is_multicast
         or address.is_unspecified
     ):
+        raise UnsafeSourceURLError(f"Refusing non-public address: {host!r}")
+
+    if any(address in network for network in BLOCKED_NETWORKS):
         raise UnsafeSourceURLError(f"Refusing non-public address: {host!r}")
 
 
