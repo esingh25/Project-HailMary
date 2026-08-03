@@ -184,13 +184,36 @@ everything) → **E3** (re-embed the corpus, recreate Qdrant collections at the 
 so it is quarantined here) → **E7** (retention, soak, cost + provider breakers) → **E8**
 (clean-clone end-state check).
 
-### Stage 5 — Player production layer *(design pending)*
+### Stage 5 — Player production layer
+
+**Design decided. Full spec: [`docs/PLAYER_PRODUCTION_DESIGN.md`](PLAYER_PRODUCTION_DESIGN.md).**
 
 Ekam's stated scope: model how team changes, coordinator changes, and roster-wide injuries move
 *player* production. This is **not** an extension of the Elo work — `edge_math.py`'s
 `COVERED_MARKETS = {"spread","moneyline"}` deliberately refuses to price player props, so this
-is a second model with its own uncertainty story. **Starts only after E8.** Design in progress;
-this section gets filled in when it lands.
+is a second model with its own uncertainty story. **Starts only after E8.**
+
+Chosen approach: **the Usage Ledger, hard-cut variant** — `team_volume × player_share ×
+efficiency` with empirical-Bayes shrinkage, priors refit at job time, and a hard cut of the
+estimation window at every detected regime boundary. Selected over a higher-scoring event-study
+design specifically because that design's only number flowed through a committed `residuals.json`
+whose correctness CI cannot audit — the same shape as the B1 defect. ~8–12 weeks part-time in
+eight phases, of which **phases 0–4 are a coherent stopping point**.
+
+**Three items from that design belong in *this* plan's backlog, not Stage 5** — they are defects
+today, independent of whether the projection layer is ever built:
+
+- **Player-prop queries silently emit an empty edge block.** No `game_id` resolves for a prop, so
+  `fanout.py` requests neither `live_odds` nor `live_injury`, so `edge_analysis` is `[]`. The E2E
+  asserts only the *spread* query, so CI has never caught it. **Observed 2026-08-02:**
+  `[q_prop] OK: 0 citations, 0 edge blocks`.
+- **Nothing constrains numeric literals in the generated prose.** `verify_citations` checks only
+  that a claimed `chunk_id` exists. The LLM may state any figure so long as it cites a real chunk
+  — so "LLMs propose, deterministic Python disposes" is a docstring, not an enforced invariant.
+  A `synthesis/numeric_guard.py` feeding the existing `MAX_REGENERATIONS` loop fixes it in ~4
+  days, pure, no Docker. All three design judges rated this the highest-value item in the field.
+- **The fixture's prop odds row is stamped `days_before=1`** against a 60-minute replay TTL, so
+  the freshness gate drops it before synthesis regardless of anything else.
 
 ## Standing rules for this order
 
