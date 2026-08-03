@@ -23,8 +23,8 @@ from dashboard.queries import (
 from hailmary.clients.postgres import get_pg_connection
 from hailmary.config import get_settings
 
-st.set_page_config(page_title="HailMaryRAG Dashboard", layout="wide")
-st.title("HailMaryRAG — Management Dashboard")
+st.set_page_config(page_title="Project HailMary Dashboard", layout="wide")
+st.title("Project HailMary — Management Dashboard")
 
 settings = get_settings()
 

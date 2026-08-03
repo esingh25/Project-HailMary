@@ -1,7 +1,7 @@
 [project]
 name = "hailmary"
 version = "0.1.0"
-description = "HailMaryRAG — agentic NFL/CFB research assistant (hybrid RAG + deterministic edge math)"
+description = "Project HailMary — agentic NFL/CFB research assistant (hybrid RAG + deterministic edge math)"
 authors = [
     { name = "esingh25", email = "ekam2507@gmail.com" }
 ]

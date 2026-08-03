@@ -53,7 +53,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_app(lifespan_fn: Callable | None = lifespan) -> FastAPI:
-    app = FastAPI(title="HailMaryRAG", docs_url="/docs", lifespan=lifespan_fn)
+    app = FastAPI(title="Project HailMary", docs_url="/docs", lifespan=lifespan_fn)
     app.include_router(router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

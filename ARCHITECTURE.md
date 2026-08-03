@@ -1,6 +1,6 @@
 # Architecture
 
-HailMaryRAG is two pipelines sharing four datastores, orchestrated end-to-end as a
+Project HailMary is two pipelines sharing four datastores, orchestrated end-to-end as a
 LangGraph state graph. This document maps the design onto the actual modules. The full
 frozen specification (contracts, DDL, phase rules, decision log) lives in
 [docs/DESIGN.md](docs/DESIGN.md); the milestone-by-milestone build plan is

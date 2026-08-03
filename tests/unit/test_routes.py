@@ -317,7 +317,7 @@ async def test_chat_page_is_served_at_root():
     async with make_app(llm) as client:
         response = await client.get("/")
     assert response.status_code == 200
-    assert "HailMaryRAG" in response.text
+    assert "Project HailMary" in response.text
 
 
 @pytest.mark.unit
