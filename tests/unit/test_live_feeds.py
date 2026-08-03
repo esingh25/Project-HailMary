@@ -3,6 +3,7 @@ captured row shapes, no network, no pandas."""
 
 from datetime import UTC, date, datetime
 
+import httpx
 import pytest
 
 from hailmary.clients.feeds.factory import LiveFeedClient, get_feed_client
@@ -171,20 +172,48 @@ def test_odds_snapshots_from_event_shape_all_three_markets():
 
 
 class FakeBudgetPG:
-    def __init__(self, calls_used: int, calls_limit: int = 500):
+    """Stands in for the api_budget row, honouring the compare-and-swap guard.
+
+    `execute` returns an asyncpg-style command tag, and the UPDATE only "lands"
+    when the CAS predicate still matches — which is what makes the contention
+    test below meaningful rather than decorative.
+    """
+
+    def __init__(self, calls_used: int, calls_limit: int = 500, period_start=date(2026, 7, 1)):
         self.row = {
             "source": "the_odds_api",
-            "period_start": date(2026, 7, 1),
+            "period_start": period_start,
             "calls_used": calls_used,
             "calls_limit": calls_limit,
         }
         self.updates: list[tuple] = []
+        # Simulates other consumers winning the race: each entry bumps
+        # calls_used just before our UPDATE is evaluated.
+        self.steal_before_update = 0
 
     async def fetchrow(self, query, *args):
-        return self.row
+        return dict(self.row)
 
     async def execute(self, query, *args):
-        self.updates.append(args)
+        if self.steal_before_update > 0:
+            self.steal_before_update -= 1
+            self.row["calls_used"] += 1
+
+        if "calls_used = calls_used - " in query:  # refund path
+            n, period_start = args
+            if self.row["period_start"] == period_start and self.row["calls_used"] >= n:
+                self.row["calls_used"] -= n
+                self.updates.append(("refund", n))
+                return "UPDATE 1"
+            return "UPDATE 0"
+
+        new_period, new_used, seen_period, seen_used = args
+        if self.row["period_start"] != seen_period or self.row["calls_used"] != seen_used:
+            return "UPDATE 0"  # CAS miss — someone else moved the row
+        self.row["period_start"] = new_period
+        self.row["calls_used"] = new_used
+        self.updates.append((new_period, new_used))
+        return "UPDATE 1"
 
 
 @pytest.mark.unit
@@ -200,6 +229,65 @@ async def test_odds_budget_guard_consumes_when_allowed():
     pg = FakeBudgetPG(calls_used=10)
     await _consume_budget(pg, 1, date(2026, 7, 7))
     assert pg.updates == [(date(2026, 7, 1), 11)]
+    assert pg.row["calls_used"] == 11
+
+
+@pytest.mark.unit
+async def test_odds_budget_guard_retries_when_a_concurrent_consumer_wins_the_race():
+    """The CAS is the whole point: a competing consumer that lands between our
+    read and our write must not be overwritten. Before the guard existed, both
+    callers wrote an absolute value and one increment vanished."""
+    pg = FakeBudgetPG(calls_used=10)
+    pg.steal_before_update = 1  # one rival consumes while we are deciding
+
+    await _consume_budget(pg, 1, date(2026, 7, 7))
+
+    # 10 start + 1 stolen by the rival + 1 ours == 12. A lost update would be 11.
+    assert pg.row["calls_used"] == 12
+    assert len(pg.updates) == 1  # only our own successful write is recorded
+
+
+@pytest.mark.unit
+async def test_odds_budget_guard_refuses_rather_than_overspend_under_sustained_contention():
+    """If every attempt loses the CAS, refuse. Never fall through to the call."""
+    pg = FakeBudgetPG(calls_used=10)
+    pg.steal_before_update = 99  # rivals win every round
+
+    with pytest.raises(OddsBudgetExceededError, match="contention"):
+        await _consume_budget(pg, 1, date(2026, 7, 7))
+
+
+@pytest.mark.unit
+async def test_odds_budget_guard_refuses_when_the_rival_exhausts_the_cap_mid_decision():
+    pg = FakeBudgetPG(calls_used=499)
+    pg.steal_before_update = 1  # rival takes the last slot
+
+    with pytest.raises(OddsBudgetExceededError):
+        await _consume_budget(pg, 1, date(2026, 7, 7))
+    assert pg.row["calls_used"] <= pg.row["calls_limit"]
+
+
+@pytest.mark.unit
+async def test_odds_budget_is_refunded_when_the_request_never_reaches_the_vendor():
+    """A DNS/TLS/connection failure means the vendor never counted the call, so
+    neither should we — otherwise transient faults permanently burn quota."""
+
+    class ExplodingClient:
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("name resolution failed")
+
+    # fetch_odds stamps itself from the real clock, so pin the fake's period to
+    # the current month — otherwise try_consume rolls the period over and the
+    # before/after counts are not comparable.
+    this_month = datetime.now(UTC).date().replace(day=1)
+    pg = FakeBudgetPG(calls_used=10, period_start=this_month)
+    settings = Settings(odds_api_enabled=True, odds_api_key="k")
+
+    with pytest.raises(httpx.ConnectError):
+        await fetch_odds("nfl", "g1", "evt1", settings, pg=pg, client=ExplodingClient())
+
+    assert pg.row["calls_used"] == 10, "the reserved slot must be given back"
+    assert ("refund", 1) in pg.updates
 
 
 @pytest.mark.unit
