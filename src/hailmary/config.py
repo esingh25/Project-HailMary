@@ -89,10 +89,12 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
 
-    # Secrets (local .env only; unset in CI)
+    # Secrets (local .env only; unset in CI).
+    # No voyage_api_key: embeddings go through Gemini now (docs/AMENDMENTS.md A1), so the
+    # field was dead. anthropic_api_key stays because clients/llm.py still resolves an
+    # "anthropic/"-qualified model id against it.
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
-    voyage_api_key: str | None = None
     cfbd_api_key: str | None = None
     odds_api_key: str | None = None
 

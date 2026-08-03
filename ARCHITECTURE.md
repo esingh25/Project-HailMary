@@ -4,7 +4,9 @@ Project HailMary is two pipelines sharing four datastores, orchestrated end-to-e
 LangGraph state graph. This document maps the design onto the actual modules. The full
 frozen specification (contracts, DDL, phase rules, decision log) lives in
 [docs/DESIGN.md](docs/DESIGN.md); the milestone-by-milestone build plan is
-[docs/PLAN.md](docs/PLAN.md).
+[docs/PLAN.md](docs/PLAN.md). DESIGN.md is frozen, so every deliberate deviation from it
+is recorded in [docs/AMENDMENTS.md](docs/AMENDMENTS.md) — including the swap of the LLM
+and embedding provider from Anthropic + Voyage to Google Gemini.
 
 ## System overview
 
@@ -18,7 +20,7 @@ frozen specification (contracts, DDL, phase rules, decision log) lives in
   ═══════════════════════════════════════════════════════════════════════════
               SYNC QUERY PIPELINE (LangGraph: src/hailmary/graph.py)
   user query ──► decompose ──► retrieve ──► merge ──► synthesize ──► deliver
-                 (Haiku +      (3 parallel  (dedup,    (edge math +   (FastAPI,
+                 (fast-model   (3 parallel  (dedup,    (edge math +   (FastAPI,
                   guardrail,    sub-agents,  freshness,  grounded      sessions,
                   routing       no LLM)      rerank,     prose +       dashboard)
                   table)                     cache)      citation guard)
@@ -33,14 +35,14 @@ clarification — no retrieval happens for out-of-scope queries
 | Phase | Module | Responsibility |
 |---|---|---|
 | 0 Ingestion | `src/hailmary/ingestion/` | `normalize.py` canonicalizes feed records; `indexer.py` upserts to ES/Qdrant/Redis/Postgres keyed by content hash (re-runs are no-ops); `elo.py` + `ratings_job.py` compute Elo power ratings on each ingestion pass; `budget.py` holds the refuse-don't-exceed arithmetic for The Odds API 500-req/mo quota (live wiring lands in M8); `scheduler.py` runs it all on APScheduler |
-| 1 Decompose | `src/hailmary/decompose/` | `guardrail.py` rejects non-football queries; `extractor.py` pulls entities/intent/conditions via Haiku + `instructor`; `resolution.py` resolves names against the fixture entity map and raises `clarification_needed` on surname collisions; `routing.py` maps intent → target indexes with a pure lookup table — the LLM never chooses indexes |
+| 1 Decompose | `src/hailmary/decompose/` | `guardrail.py` rejects non-football queries; `extractor.py` pulls entities/intent/conditions via the fast model (`settings.haiku_model`) + `instructor`; `resolution.py` resolves names against the fixture entity map and raises `clarification_needed` on surname collisions; `routing.py` maps intent → target indexes with a pure lookup table — the LLM never chooses indexes |
 | 2 Retrieve | `src/hailmary/retrieval/` | `stats_agent.py` (Elasticsearch structured + BM25), `semantic_agent.py` (Qdrant filtered ANN), `live_agent.py` (Redis odds/injuries/weather); `fanout.py` runs them in parallel with per-source timeouts and records `sources_failed` instead of aborting |
 | 3 Merge | `src/hailmary/rerank/` | `merge.py` orchestrates: semantic-cache lookup (`cache.py`, cosine ≥ 0.92 on placeholder-normalized queries) → `dedup.py` → `freshness.py` TTL gate → `cross_encoder.py` local rerank (ms-marco-MiniLM-L-6-v2) → `decay.py` recency penalty → truncate to budget |
-| 4 Synthesize | `src/hailmary/synthesis/` | `edge_math.py` + `elo_prob.py` compute implied probability, EV%, and value/fair/no_value/insufficient_data verdicts in pure Python; `writer.py` generates grounded prose via Sonnet; `citation_guard.py` strips citations whose chunk_id is not in the retrieved evidence, regenerates ≤2×, then falls back to an evidence-only summary; `report.py` assembles the final `ResearchReport` |
+| 4 Synthesize | `src/hailmary/synthesis/` | `edge_math.py` + `elo_prob.py` compute implied probability, EV%, and value/fair/no_value/insufficient_data verdicts in pure Python; `writer.py` generates grounded prose via the reasoning model (`settings.sonnet_model`); `citation_guard.py` strips citations whose chunk_id is not in the retrieved evidence, regenerates ≤2×, then falls back to an evidence-only summary; `report.py` assembles the final `ResearchReport` |
 | 5 Deliver | `src/hailmary/delivery/` | `app.py`/`routes.py` expose `POST /research` and `GET /report/{query_id}` on localhost; `sessions.py` carries resolved entities across turns in Redis; `gating.py` is the responsible-gaming chokepoint; `static/chat.html` is the chat surface |
 | Dashboard | `dashboard/` | Streamlit panels for ingestion health, query traces, cache stats, and cost; `queries.py` holds the unit-tested data-fetching functions |
 | Contracts | `src/hailmary/schemas/contracts.py` | Pydantic models are the only interface between phases (mypy strict) |
-| Infra | `src/hailmary/clients/` | Postgres/ES/Qdrant/Redis/LLM/Voyage clients; `cassette.py` + `feeds/replay.py` implement replay mode |
+| Infra | `src/hailmary/clients/` | Postgres/ES/Qdrant/Redis clients plus `llm.py` and `voyage.py` (LLM + query embeddings; both route to Google Gemini live — see [docs/AMENDMENTS.md](docs/AMENDMENTS.md) A1); `cassette.py` + `feeds/replay.py` implement replay mode; `feeds/` also holds live clients (nflverse, CFBD, Odds API, Open-Meteo, scraper) behind a `FeedClient` protocol — landed and unit-tested, but the ingestion scheduler does not select through the factory yet |
 | Obs | `src/hailmary/obs/` | `events.py` provides the Postgres event-timeline and ingestion-log writers (ingestion logging is wired; per-phase query events land with live mode); `cost.py` implements the per-query/per-day LLM spend-cap arithmetic (unit-tested; graph wiring pending) |
 
 ## Key design decisions

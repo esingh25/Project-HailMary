@@ -1,10 +1,15 @@
-"""Voyage embedding client with a cassette layer for deterministic, keyless replay.
+"""Query-embedding client with a cassette layer for deterministic, keyless replay.
+
+Live embeddings go through Google Gemini, not Voyage (docs/AMENDMENTS.md A1). The
+class name, the `voyage_embed` cassette prefix, and the `voyage_model` setting are
+retained deliberately: the cassette key includes the model string as recorded, so
+renaming them would invalidate every committed cassette for no behavioural gain.
+Renaming is deferred (FINISH_PLAN.md F1).
 
 Document embeddings for the synthetic_v0 fixture are precomputed and committed in
 fixtures/synthetic_v0/embeddings.json (no API calls needed at all in replay mode for
 document vectors). This client covers *query* embeddings, which vary per request and
-so need the same cassette mechanism as the LLM client. Live-mode Voyage wiring lands
-in M3 (Phase 2 semantic retrieval) once there is a query to embed.
+so need the same cassette mechanism as the LLM client.
 """
 
 from pathlib import Path
@@ -44,6 +49,6 @@ class VoyageClient:
         return list(result.embeddings[0].values)
 
     def record(self, model: str, text: str, vector: list[float]) -> None:
-        """Persist a cassette for (model, text) -> vector, once a Voyage key exists."""
+        """Persist a cassette for (model, text) -> vector, once GEMINI_API_KEY is set."""
         key = cassette_key("voyage_embed", model, text)
         save_cassette(self._cassette_dir, key, {"vector": vector})
