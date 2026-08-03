@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from hailmary.clients.cassette import CassetteMissError
 from hailmary.delivery.gating import check_gating
 from hailmary.delivery.sessions import (
     append_turn,
@@ -101,7 +102,20 @@ async def submit_research(payload: ResearchRequest, request: Request) -> Researc
     }
 
     graph = build_graph()
-    final_state = await graph.ainvoke(graph_state)
+    try:
+        final_state = await graph.ainvoke(graph_state)
+    except CassetteMissError as exc:
+        # Keyless replay can only answer queries whose LLM calls were recorded.
+        # CI stays loud (the e2e drives the graph directly); the chat surface
+        # degrades with an explanation instead of a 500.
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Replay mode has no recorded LLM response for this query. "
+                "Ask one of the recorded demo queries, or configure a live "
+                "API key (see README 'Going live')."
+            ),
+        ) from exc
 
     await append_turn(
         state.redis_client,

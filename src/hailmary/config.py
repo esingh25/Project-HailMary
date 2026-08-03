@@ -91,6 +91,7 @@ class Settings(BaseSettings):
 
     # Secrets (local .env only; unset in CI)
     anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
     voyage_api_key: str | None = None
     cfbd_api_key: str | None = None
     odds_api_key: str | None = None

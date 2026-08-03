@@ -256,3 +256,63 @@ async def test_merge_context_reports_dropped_stale_count():
 
     assert result.dropped_stale == 1
     assert len(result.ranked_chunks) == 1
+
+
+@pytest.mark.unit
+async def test_cache_hit_refreshes_odds_in_position_preserving_prompt_order():
+    """Repeat queries must reproduce the miss path's chunk ordering — the writer
+    prompt renders from this order, and replay cassettes key on the exact
+    prompt, so an appended-at-the-end refresh would break every repeat query."""
+    entities = QueryEntities(teams=["KC"], players=[], game_id="g1", week=18, season=2026)
+    retrieved = RetrievedContext(query_id="q1", chunks=[], sources_attempted=[], sources_failed=[])
+
+    stale_odds_chunk = make_chunk("live_odds", "odds:g1:dk:spread:KC -6.5", content="stale -110")
+    cached_merged = MergedContext(
+        query_id="q_old",
+        ranked_chunks=[stale_odds_chunk, make_chunk("stats_es", "cached_c1")],
+        cache_hit=False,
+        dropped_stale=0,
+        rerank_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    )
+    qdrant = FakeQdrant(search_results=[SimpleNamespace(id="point1", score=0.99)])
+    pg = FakePG(
+        row={
+            "cache_id": "cache1",
+            "merged_context": cached_merged.model_dump_json(),
+            "prompt_version": "v1",
+        }
+    )
+    fresh_odds_snapshot = (
+        '{"game_id":"g1","book":"dk","market":"spread","selection":"KC -6.5",'
+        '"line":-6.5,"price":-108,"captured_at":"2026-07-04T00:00:00+00:00"}'
+    )
+    redis_client = FakeRedis({"odds:g1:dk:spread:KC -6.5": fresh_odds_snapshot})
+    scorer, _ = fake_scorer_calls([0.9])
+
+    result = await merge_context(
+        "q1",
+        "raw text",
+        entities,
+        retrieved,
+        ENTITY_MAP,
+        qdrant,
+        pg,
+        redis_client,
+        FakeVoyage(),
+        "voyage-3",
+        CacheConfig(),
+        TtlConfig(),
+        DecayConfig(),
+        RetrievalConfig(),
+        replay_mode=True,
+        prompt_version="v1",
+        now=NOW,
+        scorer=scorer,
+    )
+
+    assert [c.chunk_id for c in result.ranked_chunks] == [
+        "odds:g1:dk:spread:KC -6.5",
+        "cached_c1",
+    ]  # same order as the cached (miss-path) ranking
+    refreshed = result.ranked_chunks[0]
+    assert refreshed.structured_data["price"] == -108  # fresh line, not the cached one

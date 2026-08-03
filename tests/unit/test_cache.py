@@ -155,7 +155,10 @@ async def test_lookup_cache_miss_when_no_results():
 
 
 @pytest.mark.unit
-async def test_store_cache_strips_live_odds_before_persisting():
+async def test_store_cache_persists_full_ranking_including_odds_placeholders():
+    """Odds chunks are cached as position placeholders so a hit reproduces the
+    miss path's ordering; the never-served-stale invariant is enforced at serve
+    time by merge._refresh_live_odds (see tests/unit/test_merge.py)."""
     merged = make_merged(
         [make_chunk(source="stats_es"), make_chunk(source="live_odds", chunk_id="c2")]
     )
@@ -167,5 +170,5 @@ async def test_store_cache_strips_live_odds_before_persisting():
     assert len(qdrant.upserts) == 1
     insert_call = pg.execute_calls[0]
     persisted_json = insert_call[1][2]
-    assert "live_odds" not in persisted_json
+    assert "live_odds" in persisted_json
     assert "stats_es" in persisted_json

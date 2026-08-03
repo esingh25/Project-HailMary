@@ -43,7 +43,7 @@ def _chunk(chunk_id: str, source: str) -> RetrievedChunk:
 
 
 @pytest.mark.integration
-async def test_cache_store_then_lookup_hits_and_strips_live_odds(stores, settings, fixture_data):
+async def test_cache_store_then_lookup_round_trips_full_ranking(stores, settings, fixture_data):
     # Ensures the semantic_cache collection exists at the fixture's vector dim.
     await run_replay_ingestion_pass(
         fixture_data, stores.es, stores.qdrant, stores.redis, stores.pg, settings
@@ -72,8 +72,9 @@ async def test_cache_store_then_lookup_hits_and_strips_live_odds(stores, setting
         NOW,
     )
     assert hit is not None
-    chunk_ids = {c.chunk_id for c in hit.ranked_chunks}
-    assert chunk_ids == {"stats_1"}  # live_odds never cached — always re-fetched fresh
+    # Full ranking round-trips, odds included as position placeholders; the
+    # serve path (merge._refresh_live_odds) replaces odds content before use.
+    assert [c.chunk_id for c in hit.ranked_chunks] == ["stats_1", "odds_1"]
 
     stale = await lookup_cache(
         stores.qdrant,
