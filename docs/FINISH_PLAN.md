@@ -94,6 +94,116 @@ Read this section before touching anything. It binds both the implementer and th
 
 ---
 
+# Build order — what to build, in an order where nothing breaks
+
+*Added 2026-08-02, after B1 landed and Docker arrived. This section is the authoritative
+sequence; the task table at the bottom is a reference index, not an order. Each task's full
+spec still lives in its own section below.*
+
+## The two facts that drive the whole order
+
+**1. The merge is load-bearing and its cost grows every day it waits.**
+`origin/m8-keyless-slice` touches `rerank/cache.py`, `rerank/merge.py`, `config.py`,
+`clients/llm.py`, `clients/voyage.py`, `delivery/routes.py` and the whole `clients/feeds/`
+package — which are, respectively, the targets of **B3, B3, C2, C2, A2, B7 and B5**. Anything
+built on those files before the merge gets rewritten after it.
+
+Measured against `main` @ `74441ab` (not the plan's original `397c078`):
+
+| File | Status |
+|---|---|
+| `README.md` | **CONFLICT** — expected, `main` got a new README in `397c078` |
+| `tests/unit/test_routes.py` | **CONFLICT** — *new*, created by B1 adding a test + `FakePG.fetch` |
+| `src/hailmary/delivery/routes.py` | auto-merges clean (B1 and M8 edit different hunks) |
+
+The plan's original "exactly one file conflicts" is stale. **Merge early — A2 is the second
+thing done, not the tenth.**
+
+**2. Docker is available now, so verification stops being deferred.**
+The original plan pushed every hard check to D1 because nothing could run locally. That is no
+longer true. **Tasks that touch retrieval, caching, routes, or persistence now run the
+integration tier and the replay E2E as part of their own gate**, not six tasks later. D1 stops
+being a milestone and becomes a standing habit. `BLOCKED` should now be rare and specific.
+
+## The order
+
+### Stage 1 — Land the codebase (do not reorder)
+
+| # | Task | Why here | Gate |
+|---|---|---|---|
+| 1 | **A1** rebrand | Trivial, touches none of M8's files. Clears the deck. | unit |
+| 2 | **A2** merge M8 + reconcile docs | **Everything downstream depends on this.** Resolve 2 conflicts. | unit + **integration + E2E** |
+| 3 | **A3** push, both CI jobs green | First independent signal the merge is sound. | CI |
+
+> If A2 goes wrong, stop. Do not start Phase B on a broken merge — `git revert` the merge
+> commit and escalate. Every later task assumes post-merge code.
+
+### Stage 2 — Correctness (B2 first; it gates all of Phase C)
+
+| # | Task | Depends on | Gate |
+|---|---|---|---|
+| 4 | **B2** dashboard event loop ⚠️ | — | unit + **manually render panels** (now possible) |
+| 5 | **B3** gate + re-truncate on cache hit | **A2** — the fix targets M8's `_refresh_live_odds` | unit + **integration** |
+| 6 | **B4** reject future-dated chunks | — | unit |
+| 7 | **B5** Odds API key leak 🔒 | **A2** — `feeds/odds_api.py` only exists post-merge | unit |
+| 8 | **B7** gate `GET /report` | — (touches `routes.py`; cleaner post-merge) | unit + **E2E** |
+| 9 | **B6** make mypy run | **B3** — B3 rewrites 2 of the 3 files holding untyped defs | **mypy** + unit |
+| 10 | **B8** phase review, push, **stop for Ekam** | all of Stage 2 | CI |
+
+> **B6 moved after B7**, one slot later than the original plan. Reason: five of the nine mypy
+> errors are `[no-untyped-def]` in `rerank/cache.py`, `cross_encoder.py` and `merge.py`, and B3
+> rewrites two of those. Typing them before B3 rewrites them is work done twice. Enabling mypy
+> at the end of Stage 2 still gates all of Stage 3, which is the point.
+
+### Stage 3 — Observability (strictly sequential; each feeds the next)
+
+| # | Task | Depends on | Why |
+|---|---|---|---|
+| 11 | **C4** structured logging | — | Trivial and independent. Do it **first** so the next three are debuggable. |
+| 12 | **C1** per-phase query events | — | Creates the `events` write path C2 and C3 both use. Confirmed dead: `events` had **0 rows** after a full E2E. |
+| 13 | **C2** LLM cost breakers | **C1** (emits `cost_tracking_disabled`), **A2** (`config.py`, `llm.py`) | Ships **disabled** until Ekam supplies Gemini prices — build the seam, leave prices `None`. |
+| 14 | **C3** persist spend to the dashboard | **C2** (produces the numbers), **B2** (dashboard must render) | Streamlit is a separate process and cannot see C2's in-memory trackers. |
+| 15 | **C5** phase review + **full re-audit** + push | all of Stage 3 | Re-runs the 5-lens audit against the changed repo *and* this document. |
+
+> **C2 is not blocked by the missing prices.** Per Rule 4, add
+> `input_price_per_mtok`/`output_price_per_mtok` defaulting to `None`, skip accounting when
+> either is `None`, and wire the full breaker path so it activates the moment real prices land.
+> Do not stall Stage 3 waiting on Ekam.
+
+### Stage 4 — Live mode (Ekam-gated: needs keys)
+
+Order matters here for a reason the audit found: **E4 → E5 is circular unless E2 runs first.**
+`build_fixture.py` sources `odds_timeseries.jsonl` from the `odds_archive` table, whose only
+writer is the *replay* pass reading odds out of an *existing* fixture. E2's live scheduler must
+populate `odds_archive` from live data before E5 can build a fixture containing real odds.
+
+**E1** (keys + model ids + prices + cassette decision) → **E2** (wire the feed factory; unblocks
+everything) → **E3** (re-embed the corpus, recreate Qdrant collections at the new vector size) →
+**E4** (live ingestion inside the 500 req/month budget; keyless sources first, Odds API last) →
+**E5** (build `real_week_v1`) → **E6** (tighten the citation-guard prompt — re-records cassettes,
+so it is quarantined here) → **E7** (retention, soak, cost + provider breakers) → **E8**
+(clean-clone end-state check).
+
+### Stage 5 — Player production layer *(design pending)*
+
+Ekam's stated scope: model how team changes, coordinator changes, and roster-wide injuries move
+*player* production. This is **not** an extension of the Elo work — `edge_math.py`'s
+`COVERED_MARKETS = {"spread","moneyline"}` deliberately refuses to price player props, so this
+is a second model with its own uncertainty story. **Starts only after E8.** Design in progress;
+this section gets filled in when it lands.
+
+## Standing rules for this order
+
+- **Never start a stage on a red gate.** Stage boundaries are checkpoints, not suggestions.
+- **Run the integration tier and replay E2E on any task touching retrieval, caching, routes,
+  or persistence.** Docker exists now; deferring is no longer an excuse.
+- **Re-check the merge conflict set before A2** — `git merge-tree --write-tree --name-only main
+  origin/m8-keyless-slice`. It has already changed once and will change again if anything lands
+  on `main` first.
+- **A2 and B8 and C5 are the three points where Ekam should look before more work stacks up.**
+
+---
+
 ## The review protocol
 
 This is the part v1 lacked. In v1 every task self-certified: the same agent that wrote the
